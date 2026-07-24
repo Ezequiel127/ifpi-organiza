@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>IFPI Organiza</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <main class="page-shell">
+    <section class="phone-frame" aria-label="Protótipo mobile do aplicativo IFPI Organiza">
+      <div class="phone-status">
+        <span>09:30</span>
+        <span>IFPI Organiza</span>
+      </div>
+
+      <section class="screen active" id="login-screen">
+        <div class="login-content">
+          <div class="brand-mark">IF</div>
+          <h1>IFPI Organiza</h1>
+          <p>Organize tarefas, provas e prazos acadêmicos em um só lugar.</p>
+
+          <form class="login-form">
+            <label for="email">E-mail acadêmico</label>
+            <input type="email" id="email" value="aluno@ifpi.edu.br">
+
+            <label for="password">Senha</label>
+            <input type="password" id="password" value="123456">
+
+            <button type="button" class="primary-button" data-screen="home-screen">Entrar</button>
+          </form>
+        </div>
+      </section>
+
+      <section class="screen app-screen" id="home-screen">
+        <header class="app-header">
+          <div>
+            <span class="eyebrow">Bom dia, Ezequiel</span>
+            <h2>Resumo acadêmico</h2>
+          </div>
+          <button class="icon-button" type="button" data-screen="profile-screen" aria-label="Abrir perfil">EV</button>
+        </header>
+
+        <div class="summary-grid">
+          <article class="summary-card">
+            <span class="summary-number" id="pending-count">0</span>
+            <span>Pendentes</span>
+          </article>
+          <article class="summary-card">
+            <span class="summary-number" id="done-count">0</span>
+            <span>Concluídas</span>
+          </article>
+        </div>
+
+        <article class="highlight-card">
+          <span class="tag">Próximo prazo</span>
+          <h3 id="next-task-title">Nenhuma tarefa cadastrada</h3>
+          <p id="next-task-info">Adicione uma tarefa para acompanhar os próximos compromissos.</p>
+        </article>
+
+        <section class="section-block">
+          <div class="section-title">
+            <h3>Atividades recentes</h3>
+            <button type="button" data-screen="tasks-screen">Ver todas</button>
+          </div>
+          <div class="task-list compact" id="recent-tasks"></div>
+        </section>
+      </section>
+
+      <section class="screen app-screen" id="tasks-screen">
+        <header class="app-header">
+          <div>
+            <span class="eyebrow">Minhas tarefas</span>
+            <h2>Lista de atividades</h2>
+          </div>
+          <button class="add-button" type="button" data-screen="new-task-screen">+</button>
+        </header>
+
+        <div class="filter-row">
+          <button class="filter-button active" type="button" data-filter="all">Todas</button>
+          <button class="filter-button" type="button" data-filter="pending">Pendentes</button>
+          <button class="filter-button" type="button" data-filter="done">Concluídas</button>
+        </div>
+
+        <div class="task-list" id="tasks-list"></div>
+      </section>
+
+      <section class="screen app-screen" id="new-task-screen">
+        <header class="app-header">
+          <div>
+            <span class="eyebrow">Cadastro</span>
+            <h2>Nova tarefa</h2>
+          </div>
+        </header>
+
+        <form class="task-form" id="task-form">
+          <label for="task-title">Título</label>
+          <input type="text" id="task-title" placeholder="Ex.: Lista de Programação Mobile" required>
+
+          <label for="task-subject">Disciplina</label>
+          <input type="text" id="task-subject" placeholder="Ex.: Programação para Dispositivos Móveis" required>
+
+          <label for="task-date">Prazo</label>
+          <input type="date" id="task-date" required>
+
+          <label for="task-type">Tipo</label>
+          <select id="task-type">
+            <option>Trabalho</option>
+            <option>Prova</option>
+            <option>Atividade</option>
+            <option>Seminário</option>
+          </select>
+
+          <button class="primary-button" type="submit">Salvar tarefa</button>
+        </form>
+      </section>
+
+      <section class="screen app-screen" id="calendar-screen">
+        <header class="app-header">
+          <div>
+            <span class="eyebrow">Calendário</span>
+            <h2>Prazos do mês</h2>
+          </div>
+        </header>
+
+        <div class="month-card">
+          <strong>Julho 2026</strong>
+          <div class="calendar-grid" aria-label="Calendário simplificado">
+            <span>S</span><span>T</span><span>Q</span><span>Q</span><span>S</span><span>S</span><span>D</span>
+            <button class="marked">1</button><button>2</button><button class="marked">3</button><button>4</button><button>5</button>
+            <button>6</button><button>7</button><button class="marked">8</button><button>9</button><button>10</button><button>11</button><button>12</button>
+            <button>13</button><button>14</button><button>15</button><button>16</button><button>17</button><button>18</button><button>19</button>
+            <button>20</button><button>21</button><button>22</button><button>23</button><button>24</button><button>25</button><button>26</button>
+            <button>27</button><button>28</button><button>29</button><button>30</button><button>31</button>
+          </div>
+        </div>
+
+        <section class="section-block">
+          <div class="section-title">
+            <h3>Próximos prazos</h3>
+          </div>
+          <div id="deadline-list" class="deadline-list"></div>
+        </section>
+      </section>
+
+      <section class="screen app-screen" id="profile-screen">
+        <header class="app-header">
+          <div>
+            <span class="eyebrow">Perfil</span>
+            <h2>Dados do aluno</h2>
+          </div>
+        </header>
+
+        <article class="profile-card">
+          <div class="avatar">EV</div>
+          <h3>Ezequiel Victor</h3>
+          <p>ADS 4 - Programação para Dispositivos Móveis</p>
+          <dl>
+            <div>
+              <dt>Instituição</dt>
+              <dd>IFPI</dd>
+            </div>
+            <div>
+              <dt>E-mail</dt>
+              <dd>aluno@ifpi.edu.br</dd>
+            </div>
+            <div>
+              <dt>Etapa</dt>
+              <dd>Projeto e Design do MVP</dd>
+            </div>
+          </dl>
+        </article>
+
+        <button class="secondary-button" type="button" data-screen="login-screen">Sair</button>
+      </section>
+
+      <nav class="bottom-nav" aria-label="Navegação principal">
+        <button type="button" class="nav-button active" data-screen="home-screen">Início</button>
+        <button type="button" class="nav-button" data-screen="tasks-screen">Tarefas</button>
+        <button type="button" class="nav-button" data-screen="new-task-screen">Nova</button>
+        <button type="button" class="nav-button" data-screen="calendar-screen">Prazos</button>
+        <button type="button" class="nav-button" data-screen="profile-screen">Perfil</button>
+      </nav>
+    </section>
+  </main>
+
+  <script src="script.js"></script>
+</body>
+</html>
