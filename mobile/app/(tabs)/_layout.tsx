@@ -1,33 +1,63 @@
+import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { Tabs } from 'expo-router';
-import React from 'react';
 
 import { HapticTab } from '@/components/haptic-tab';
-import { IconSymbol } from '@/components/ui/icon-symbol';
-import { Colors } from '@/constants/theme';
-import { useColorScheme } from '@/hooks/use-color-scheme';
+import { colors } from '@/src/theme/colors';
 
 export default function TabLayout() {
-  const colorScheme = useColorScheme();
-
   return (
     <Tabs
       screenOptions={{
-        tabBarActiveTintColor: Colors[colorScheme ?? 'light'].tint,
         headerShown: false,
+        tabBarActiveTintColor: colors.primaryDark,
+        tabBarInactiveTintColor: colors.textMuted,
         tabBarButton: HapticTab,
+        tabBarLabelStyle: {
+          fontSize: 12,
+          fontWeight: '700',
+        },
+        tabBarStyle: {
+          backgroundColor: colors.card,
+          borderTopColor: colors.border,
+          minHeight: 66,
+          paddingBottom: 8,
+          paddingTop: 8,
+        },
       }}>
       <Tabs.Screen
         name="index"
         options={{
-          title: 'Home',
-          tabBarIcon: ({ color }) => <IconSymbol size={28} name="house.fill" color={color} />,
+          title: 'Início',
+          tabBarIcon: ({ color, size }) => (
+            <MaterialIcons color={color} name="home" size={size} />
+          ),
         }}
       />
       <Tabs.Screen
-        name="explore"
+        name="tarefas"
         options={{
-          title: 'Explore',
-          tabBarIcon: ({ color }) => <IconSymbol size={28} name="paperplane.fill" color={color} />,
+          title: 'Tarefas',
+          tabBarIcon: ({ color, size }) => (
+            <MaterialIcons color={color} name="assignment" size={size} />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="prazos"
+        options={{
+          title: 'Prazos',
+          tabBarIcon: ({ color, size }) => (
+            <MaterialIcons color={color} name="event" size={size} />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="perfil"
+        options={{
+          title: 'Perfil',
+          tabBarIcon: ({ color, size }) => (
+            <MaterialIcons color={color} name="person" size={size} />
+          ),
         }}
       />
     </Tabs>
