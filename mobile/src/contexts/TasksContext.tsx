@@ -40,12 +40,12 @@ type TasksState = {
   tasks: Task[];
 };
 
-type TasksAction =
-  | { type: 'load'; payload: Task[] }
-  | { type: 'add'; payload: Task }
-  | { type: 'remove'; payload: { id: string } }
-  | { type: 'update'; payload: { id: string; changes: TaskUpdate } }
-  | { type: 'setCompleted'; payload: { id: string; completed: boolean } };
+type TasksAction = { type: 'replace'; payload: Task[] };
+
+type AutomaticReconciliationSource =
+  | 'durante a inicialização'
+  | 'ao retornar ao aplicativo'
+  | 'após uma alteração persistida';
 
 type TasksContextValue = {
   tasks: Task[];
@@ -62,7 +62,7 @@ type TasksContextValue = {
 const TasksContext = createContext<TasksContextValue | undefined>(undefined);
 
 function logAutomaticReconciliationErrors(
-  source: 'durante a inicialização' | 'ao retornar ao aplicativo',
+  source: AutomaticReconciliationSource,
   summary: TaskReminderReconciliationSummary
 ) {
   if (summary.errors.length > 0) {
@@ -75,7 +75,7 @@ function logAutomaticReconciliationErrors(
 
 function reconcileTaskRemindersInBackground(
   tasks: readonly Task[],
-  source: 'durante a inicialização' | 'ao retornar ao aplicativo'
+  source: AutomaticReconciliationSource
 ) {
   try {
     void reconcileTaskReminders(tasks, { requestPermission: false })
@@ -97,45 +97,9 @@ function reconcileTaskRemindersInBackground(
 }
 
 function tasksReducer(state: TasksState, action: TasksAction): TasksState {
-  if (action.type === 'load') {
+  if (action.type === 'replace') {
     return {
       tasks: action.payload,
-    };
-  }
-
-  if (action.type === 'add') {
-    if (state.tasks.some((task) => task.id === action.payload.id)) {
-      return state;
-    }
-
-    return {
-      tasks: [action.payload, ...state.tasks],
-    };
-  }
-
-  if (action.type === 'remove') {
-    return {
-      tasks: state.tasks.filter((task) => task.id !== action.payload.id),
-    };
-  }
-
-  if (action.type === 'update') {
-    return {
-      tasks: state.tasks.map((task) =>
-        task.id === action.payload.id
-          ? { ...task, ...action.payload.changes }
-          : task
-      ),
-    };
-  }
-
-  if (action.type === 'setCompleted') {
-    return {
-      tasks: state.tasks.map((task) =>
-        task.id === action.payload.id
-          ? { ...task, completed: action.payload.completed }
-          : task
-      ),
     };
   }
 
@@ -156,6 +120,18 @@ export function TasksProvider({ children }: { children: ReactNode }) {
 
   latestTasks.current = state.tasks;
 
+  const applyPersistedTaskList = useCallback((nextTasks: Task[]) => {
+    latestTasks.current = nextTasks;
+    dispatch({ type: 'replace', payload: nextTasks });
+
+    if (hasLoadedPersistedTasks.current) {
+      reconcileTaskRemindersInBackground(
+        nextTasks,
+        'após uma alteração persistida'
+      );
+    }
+  }, []);
+
   useEffect(() => {
     let isMounted = true;
 
@@ -167,7 +143,7 @@ export function TasksProvider({ children }: { children: ReactNode }) {
         if (isMounted) {
           latestTasks.current = tasks;
           hasLoadedPersistedTasks.current = true;
-          dispatch({ type: 'load', payload: tasks });
+          dispatch({ type: 'replace', payload: tasks });
 
           if (!hasStartedStartupReconciliation.current) {
             hasStartedStartupReconciliation.current = true;
@@ -181,7 +157,7 @@ export function TasksProvider({ children }: { children: ReactNode }) {
         console.error('Não foi possível carregar as tarefas salvas.', error);
 
         if (isMounted) {
-          dispatch({ type: 'load', payload: mockTasks });
+          dispatch({ type: 'replace', payload: mockTasks });
         }
       } finally {
         if (isMounted) {
@@ -246,7 +222,8 @@ export function TasksProvider({ children }: { children: ReactNode }) {
     const insertion = insertTask(newTask)
       .then((wasInserted) => {
         if (wasInserted) {
-          dispatch({ type: 'add', payload: newTask });
+          const nextTasks = [newTask, ...latestTasks.current];
+          applyPersistedTaskList(nextTasks);
         }
 
         return wasInserted;
@@ -262,7 +239,7 @@ export function TasksProvider({ children }: { children: ReactNode }) {
     pendingInsertions.current.set(insertionKey, insertion);
 
     return insertion;
-  }, []);
+  }, [applyPersistedTaskList]);
 
   const deleteTask = useCallback((id: string): Promise<boolean> => {
     const pendingDeletion = pendingDeletions.current.get(id);
@@ -274,7 +251,10 @@ export function TasksProvider({ children }: { children: ReactNode }) {
     const deletion = deleteTaskFromDatabase(id)
       .then((wasDeleted) => {
         if (wasDeleted) {
-          dispatch({ type: 'remove', payload: { id } });
+          const nextTasks = latestTasks.current.filter(
+            (task) => task.id !== id
+          );
+          applyPersistedTaskList(nextTasks);
         }
 
         return wasDeleted;
@@ -290,7 +270,7 @@ export function TasksProvider({ children }: { children: ReactNode }) {
     pendingDeletions.current.set(id, deletion);
 
     return deletion;
-  }, []);
+  }, [applyPersistedTaskList]);
 
   const updateTask = useCallback(
     (id: string, changes: TaskUpdate): Promise<boolean> => {
@@ -303,7 +283,10 @@ export function TasksProvider({ children }: { children: ReactNode }) {
       const update = updateTaskInDatabase(id, changes)
         .then((wasUpdated) => {
           if (wasUpdated) {
-            dispatch({ type: 'update', payload: { id, changes } });
+            const nextTasks = latestTasks.current.map((task) =>
+              task.id === id ? { ...task, ...changes } : task
+            );
+            applyPersistedTaskList(nextTasks);
           }
 
           return wasUpdated;
@@ -320,12 +303,12 @@ export function TasksProvider({ children }: { children: ReactNode }) {
 
       return update;
     },
-    []
+    [applyPersistedTaskList]
   );
 
   const toggleTask = useCallback(
     (id: string) => {
-      const task = state.tasks.find((item) => item.id === id);
+      const task = latestTasks.current.find((item) => item.id === id);
 
       if (!task || pendingCompletionUpdates.current.has(id)) {
         return;
@@ -337,7 +320,10 @@ export function TasksProvider({ children }: { children: ReactNode }) {
       void updateTaskCompleted(id, completed)
         .then((wasUpdated) => {
           if (wasUpdated) {
-            dispatch({ type: 'setCompleted', payload: { id, completed } });
+            const nextTasks = latestTasks.current.map((task) =>
+              task.id === id ? { ...task, completed } : task
+            );
+            applyPersistedTaskList(nextTasks);
           }
         })
         .catch((error: unknown) => {
@@ -347,7 +333,7 @@ export function TasksProvider({ children }: { children: ReactNode }) {
           pendingCompletionUpdates.current.delete(id);
         });
     },
-    [state.tasks]
+    [applyPersistedTaskList]
   );
 
   const derivedState = useMemo(() => {
