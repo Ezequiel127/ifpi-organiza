@@ -25,9 +25,9 @@ Projeto desenvolvido para a disciplina **Programação para Dispositivos Móveis
 - GitHub
 - Visual Studio Code
 
-## Funcionalidades implementadas e testadas
+## Funcionalidades implementadas
 
-As funcionalidades abaixo foram executadas e verificadas em um dispositivo Android:
+As funcionalidades disponíveis na versão atual do MVP são:
 
 - login simulado;
 - navegação entre Dashboard, Tarefas, Prazos e Perfil;
@@ -37,7 +37,35 @@ As funcionalidades abaixo foram executadas e verificadas em um dispositivo Andro
 - exclusão de tarefas com confirmação;
 - atualização automática dos contadores;
 - atualização automática dos prazos;
-- persistência local das tarefas após fechar e reabrir o Expo Go.
+- persistência local das tarefas com Expo SQLite.
+
+## Funcionalidades testadas e aprovadas
+
+Foram executados testes funcionais manuais em um dispositivo Android por meio do Expo Go.
+
+| Funcionalidade verificada | Resultado |
+| --- | --- |
+| Login simulado | Aprovado |
+| Navegação entre Dashboard, Tarefas, Prazos e Perfil | Aprovado |
+| Cadastro de tarefas | Aprovado |
+| Filtro Todas | Aprovado |
+| Filtro Pendentes | Aprovado |
+| Filtro Concluídas | Aprovado |
+| Conclusão de tarefas | Aprovado |
+| Exclusão de tarefas com confirmação | Aprovado |
+| Atualização automática dos contadores | Aprovado |
+| Atualização automática dos prazos | Aprovado |
+| Persistência após fechar e reabrir o Expo Go | Aprovado |
+
+## Itens pendentes de verificação
+
+Os seguintes itens ainda precisam ser executados ou avaliados:
+
+- testes unitários automatizados;
+- testes de integração automatizados;
+- avaliação de usabilidade com o questionário SUS;
+- execução em outros dispositivos Android;
+- execução em outros sistemas operacionais.
 
 ## Persistência de dados
 
@@ -101,26 +129,6 @@ Depois de iniciar o projeto:
 2. escaneie o QR Code exibido no terminal ou no navegador;
 3. aguarde o carregamento do aplicativo.
 
-## Testes realizados
-
-Foram executados testes funcionais manuais em um dispositivo Android.
-
-| Funcionalidade verificada | Resultado |
-| --- | --- |
-| Login simulado | Aprovado |
-| Navegação entre Dashboard, Tarefas, Prazos e Perfil | Aprovado |
-| Cadastro de tarefas | Aprovado |
-| Filtro Todas | Aprovado |
-| Filtro Pendentes | Aprovado |
-| Filtro Concluídas | Aprovado |
-| Conclusão de tarefas | Aprovado |
-| Exclusão de tarefas com confirmação | Aprovado |
-| Atualização automática dos contadores | Aprovado |
-| Atualização automática dos prazos | Aprovado |
-| Persistência após fechar e reabrir o Expo Go | Aprovado |
-
-Testes unitários automatizados, testes de integração automatizados e avaliação de usabilidade SUS ainda não foram verificados.
-
 ## Resultados alcançados
 
 - MVP mobile executado em ambiente Android;
@@ -138,8 +146,8 @@ Testes unitários automatizados, testes de integração automatizados e avaliaç
 - não há backend remoto;
 - não há sincronização em nuvem;
 - os dados permanecem armazenados somente no banco SQLite local do dispositivo;
-- a execução foi verificada em Android;
-- outros sistemas e dispositivos ainda não foram verificados;
+- a execução foi verificada em apenas um dispositivo Android;
+- outros dispositivos Android e outros sistemas operacionais ainda não foram verificados;
 - testes automatizados ainda não foram executados;
 - avaliação SUS ainda não foi realizada.
 
@@ -149,11 +157,7 @@ As seguintes funcionalidades permanecem planejadas para versões futuras:
 
 - autenticação real de usuários;
 - backend remoto;
-- sincronização de dados em nuvem;
-- testes unitários automatizados;
-- testes de integração automatizados;
-- avaliação de usabilidade utilizando o questionário SUS;
-- verificação em outros dispositivos e sistemas operacionais.
+- sincronização de dados em nuvem.
 
 ## Estrutura do projeto
 
