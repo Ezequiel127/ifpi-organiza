@@ -57,6 +57,12 @@ Foram executados testes funcionais manuais em um dispositivo Android por meio do
 | Atualização automática dos prazos | Aprovado |
 | Persistência após fechar e reabrir o Expo Go | Aprovado |
 
+## Documentação dos testes
+
+Os procedimentos, resultados e limitações dos testes manuais estão registrados em:
+
+[Consultar relatório de testes da Etapa 2](TESTES_ETAPA_2.md)
+
 ## Itens pendentes de verificação
 
 Os seguintes itens ainda precisam ser executados ou avaliados:
