@@ -12,6 +12,8 @@ export type TaskReminderMetadata = {
   taskId: string;
   reminderType: TaskReminderType;
   deadline: string;
+  scheduledFor: string;
+  contentSignature: string;
 };
 
 export type TaskReminderCandidate = {
@@ -54,7 +56,11 @@ export function isTaskReminderMetadata(
     value.taskId.trim().length > 0 &&
     isTaskReminderType(value.reminderType) &&
     typeof value.deadline === 'string' &&
-    parseISODate(value.deadline) !== null
+    parseISODate(value.deadline) !== null &&
+    typeof value.scheduledFor === 'string' &&
+    isCanonicalDateTime(value.scheduledFor) &&
+    typeof value.contentSignature === 'string' &&
+    value.contentSignature.length > 0
   );
 }
 
@@ -77,7 +83,10 @@ function createLocalDate(
 function createMetadata(
   taskId: string,
   reminderType: TaskReminderType,
-  deadline: string
+  deadline: string,
+  trigger: Date,
+  title: string,
+  body: string
 ): TaskReminderMetadata {
   return {
     source: TASK_REMINDER_SOURCE,
@@ -85,7 +94,18 @@ function createMetadata(
     taskId,
     reminderType,
     deadline,
+    scheduledFor: trigger.toISOString(),
+    contentSignature: JSON.stringify([title, body]),
   };
+}
+
+function isCanonicalDateTime(value: string) {
+  const timestamp = Date.parse(value);
+
+  return (
+    Number.isFinite(timestamp) &&
+    new Date(timestamp).toISOString() === value
+  );
 }
 
 function getCalendarDateKey(year: number, month: number, day: number) {
@@ -170,13 +190,24 @@ export function getTaskReminderCandidates(
         Number.isFinite(definition.trigger.getTime()) &&
         definition.trigger.getTime() > minimumTriggerTimestamp
     )
-    .map(({ trigger, reminderType }) => ({
-      trigger,
-      reminderType,
-      title: NOTIFICATION_TITLE,
-      body: getNotificationBody(task.title, reminderType),
-      metadata: createMetadata(taskId, reminderType, task.deadline),
-    }))
+    .map(({ trigger, reminderType }) => {
+      const body = getNotificationBody(task.title, reminderType);
+
+      return {
+        trigger,
+        reminderType,
+        title: NOTIFICATION_TITLE,
+        body,
+        metadata: createMetadata(
+          taskId,
+          reminderType,
+          task.deadline,
+          trigger,
+          NOTIFICATION_TITLE,
+          body
+        ),
+      };
+    })
     .sort(
       (firstCandidate, secondCandidate) =>
         firstCandidate.trigger.getTime() - secondCandidate.trigger.getTime()

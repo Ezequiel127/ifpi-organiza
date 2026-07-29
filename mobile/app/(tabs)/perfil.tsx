@@ -12,12 +12,14 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { useTasks } from '@/src/contexts/TasksContext';
 import {
   configureAndroidNotificationChannel,
   hasNotificationPermission,
   requestNotificationPermission,
   scheduleLocalTestNotification,
 } from '@/src/services/notificationsService';
+import { reconcileTaskReminders } from '@/src/services/taskRemindersService';
 import { colors } from '@/src/theme/colors';
 import { spacing } from '@/src/theme/spacing';
 
@@ -30,20 +32,24 @@ const profileDetails = [
 const loginRoute = '/(auth)/login' as Href;
 
 export default function ProfileScreen() {
+  const { tasks } = useTasks();
   const [isSchedulingNotification, setIsSchedulingNotification] =
     useState(false);
-  const notificationTestInProgress = useRef(false);
+  const [isReconcilingReminders, setIsReconcilingReminders] = useState(false);
+  const notificationOperationInProgress = useRef(false);
+  const isNotificationOperationRunning =
+    isSchedulingNotification || isReconcilingReminders;
 
   function handleLogout() {
     router.replace(loginRoute);
   }
 
   async function handleTestNotification() {
-    if (notificationTestInProgress.current) {
+    if (notificationOperationInProgress.current) {
       return;
     }
 
-    notificationTestInProgress.current = true;
+    notificationOperationInProgress.current = true;
     setIsSchedulingNotification(true);
 
     try {
@@ -75,8 +81,62 @@ export default function ProfileScreen() {
         'O teste de notificação não pôde ser agendado. Tente novamente.'
       );
     } finally {
-      notificationTestInProgress.current = false;
+      notificationOperationInProgress.current = false;
       setIsSchedulingNotification(false);
+    }
+  }
+
+  async function handleReconcileTaskReminders() {
+    if (notificationOperationInProgress.current) {
+      return;
+    }
+
+    notificationOperationInProgress.current = true;
+    setIsReconcilingReminders(true);
+
+    try {
+      const summary = await reconcileTaskReminders(tasks, {
+        requestPermission: true,
+      });
+      const summaryMessage = [
+        `Mantidos: ${summary.kept}`,
+        `Agendados: ${summary.scheduled}`,
+        `Cancelados: ${summary.cancelled}`,
+        `Ignorados: ${summary.skipped}`,
+        `Erros: ${summary.errors.length}`,
+      ].join('\n');
+
+      if (summary.permissionStatus === 'denied') {
+        Alert.alert(
+          'Permissão necessária',
+          `As notificações estão desativadas. Nenhum lembrete foi agendado.\n\n${summaryMessage}`
+        );
+        return;
+      }
+
+      if (summary.permissionStatus === 'error') {
+        Alert.alert(
+          'Não foi possível verificar a permissão',
+          `A sincronização não pôde agendar lembretes.\n\n${summaryMessage}`
+        );
+        return;
+      }
+
+      Alert.alert(
+        summary.errors.length > 0
+          ? 'Sincronização concluída com avisos'
+          : 'Lembretes sincronizados',
+        summaryMessage
+      );
+    } catch (error) {
+      console.error('Não foi possível sincronizar os lembretes das tarefas.', error);
+      Alert.alert(
+        'Não foi possível sincronizar',
+        'Os lembretes das tarefas não puderam ser sincronizados. Tente novamente.'
+      );
+    } finally {
+      notificationOperationInProgress.current = false;
+      setIsReconcilingReminders(false);
     }
   }
 
@@ -135,14 +195,14 @@ export default function ProfileScreen() {
             accessibilityRole="button"
             accessibilityState={{
               busy: isSchedulingNotification,
-              disabled: isSchedulingNotification,
+              disabled: isNotificationOperationRunning,
             }}
-            disabled={isSchedulingNotification}
+            disabled={isNotificationOperationRunning}
             onPress={handleTestNotification}
             style={({ pressed }) => [
               styles.notificationButton,
               pressed && styles.buttonPressed,
-              isSchedulingNotification && styles.disabledButton,
+              isNotificationOperationRunning && styles.disabledButton,
             ]}>
             {isSchedulingNotification ? (
               <ActivityIndicator color={colors.white} size="small" />
@@ -157,6 +217,51 @@ export default function ProfileScreen() {
               {isSchedulingNotification
                 ? 'Agendando...'
                 : 'Enviar notificação de teste'}
+            </Text>
+          </Pressable>
+        </View>
+
+        <View style={styles.notificationSection}>
+          <View style={styles.notificationHeader}>
+            <View style={styles.notificationIcon}>
+              <MaterialIcons
+                color={colors.primaryDark}
+                name="event-repeat"
+                size={22}
+              />
+            </View>
+            <View style={styles.notificationHeaderText}>
+              <Text style={styles.notificationTitle}>
+                Lembretes das tarefas
+              </Text>
+              <Text style={styles.notificationDescription}>
+                Sincronize manualmente os lembretes locais das tarefas pendentes.
+              </Text>
+            </View>
+          </View>
+
+          <Pressable
+            accessibilityRole="button"
+            accessibilityState={{
+              busy: isReconcilingReminders,
+              disabled: isNotificationOperationRunning,
+            }}
+            disabled={isNotificationOperationRunning}
+            onPress={handleReconcileTaskReminders}
+            style={({ pressed }) => [
+              styles.notificationButton,
+              pressed && styles.buttonPressed,
+              isNotificationOperationRunning && styles.disabledButton,
+            ]}>
+            {isReconcilingReminders ? (
+              <ActivityIndicator color={colors.white} size="small" />
+            ) : (
+              <MaterialIcons color={colors.white} name="sync" size={20} />
+            )}
+            <Text style={styles.notificationButtonText}>
+              {isReconcilingReminders
+                ? 'Sincronizando...'
+                : 'Sincronizar lembretes das tarefas'}
             </Text>
           </Pressable>
         </View>

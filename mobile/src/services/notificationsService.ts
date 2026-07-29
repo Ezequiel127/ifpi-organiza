@@ -1,7 +1,7 @@
 import * as Notifications from 'expo-notifications';
 import { Platform } from 'react-native';
 
-const ACADEMIC_REMINDERS_CHANNEL_ID = 'academic-reminders';
+export const ACADEMIC_REMINDERS_CHANNEL_ID = 'academic-reminders';
 const TEST_NOTIFICATION_DELAY_SECONDS = 5;
 
 export async function configureAndroidNotificationChannel(): Promise<void> {
