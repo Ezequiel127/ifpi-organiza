@@ -19,7 +19,7 @@ import { spacing } from '@/src/theme/spacing';
 import { isValidISODate } from '@/src/utils/date';
 
 type FormErrors = Partial<
-  Record<'title' | 'subject' | 'deadline' | 'type', string>
+  Record<'title' | 'subject' | 'deadline' | 'type' | 'save', string>
 >;
 
 const tasksRoute = '/(tabs)/tarefas' as Href;
@@ -32,8 +32,13 @@ export default function NewTaskScreen() {
   const [type, setType] = useState('');
   const [description, setDescription] = useState('');
   const [errors, setErrors] = useState<FormErrors>({});
+  const [isSaving, setIsSaving] = useState(false);
 
-  function handleSave() {
+  async function handleSave() {
+    if (isSaving) {
+      return;
+    }
+
     const normalizedTask = {
       title: title.trim(),
       subject: subject.trim(),
@@ -67,7 +72,15 @@ export default function NewTaskScreen() {
       return;
     }
 
-    addTask(normalizedTask);
+    setIsSaving(true);
+    const wasSaved = await addTask(normalizedTask);
+    setIsSaving(false);
+
+    if (!wasSaved) {
+      setErrors({ save: 'Não foi possível salvar a tarefa. Tente novamente.' });
+      return;
+    }
+
     setTitle('');
     setSubject('');
     setDeadline('');
@@ -176,11 +189,20 @@ export default function NewTaskScreen() {
 
             <Pressable
               accessibilityRole="button"
+              accessibilityState={{ busy: isSaving, disabled: isSaving }}
+              disabled={isSaving}
               onPress={handleSave}
-              style={({ pressed }) => [styles.saveButton, pressed && styles.buttonPressed]}>
+              style={({ pressed }) => [
+                styles.saveButton,
+                pressed && styles.buttonPressed,
+                isSaving && styles.disabledButton,
+              ]}>
               <MaterialIcons color={colors.white} name="save" size={21} />
-              <Text style={styles.saveButtonText}>Salvar tarefa</Text>
+              <Text style={styles.saveButtonText}>
+                {isSaving ? 'Salvando...' : 'Salvar tarefa'}
+              </Text>
             </Pressable>
+            {errors.save ? <Text style={styles.errorText}>{errors.save}</Text> : null}
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
@@ -213,6 +235,9 @@ const styles = StyleSheet.create({
   },
   buttonPressed: {
     opacity: 0.8,
+  },
+  disabledButton: {
+    opacity: 0.65,
   },
   headerText: {
     flex: 1,
