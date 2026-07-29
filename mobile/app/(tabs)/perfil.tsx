@@ -1,9 +1,12 @@
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
-import { router, type Href } from 'expo-router';
-import { useRef, useState } from 'react';
+import { router, type Href, useFocusEffect } from 'expo-router';
+import { useCallback, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
+  AppState,
+  type AppStateStatus,
+  Linking,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -12,14 +15,13 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { useTasks } from '@/src/contexts/TasksContext';
 import {
   configureAndroidNotificationChannel,
-  hasNotificationPermission,
+  getNotificationPermissionStatus,
+  type NotificationPermissionStatus,
   requestNotificationPermission,
   scheduleLocalTestNotification,
 } from '@/src/services/notificationsService';
-import { reconcileTaskReminders } from '@/src/services/taskRemindersService';
 import { colors } from '@/src/theme/colors';
 import { spacing } from '@/src/theme/spacing';
 
@@ -31,14 +33,102 @@ const profileDetails = [
 
 const loginRoute = '/(auth)/login' as Href;
 
+type PermissionViewStatus =
+  | NotificationPermissionStatus
+  | 'checking'
+  | 'error';
+
+function getPermissionStatusLabel(status: PermissionViewStatus) {
+  if (status === 'granted') {
+    return 'Notificações permitidas';
+  }
+
+  if (status === 'denied') {
+    return 'Notificações bloqueadas';
+  }
+
+  if (status === 'undetermined') {
+    return 'Permissão ainda não definida';
+  }
+
+  if (status === 'error') {
+    return 'Não foi possível verificar a permissão';
+  }
+
+  return 'Verificando permissão...';
+}
+
 export default function ProfileScreen() {
-  const { tasks } = useTasks();
   const [isSchedulingNotification, setIsSchedulingNotification] =
     useState(false);
-  const [isReconcilingReminders, setIsReconcilingReminders] = useState(false);
+  const [isOpeningSettings, setIsOpeningSettings] = useState(false);
+  const [permissionStatus, setPermissionStatus] =
+    useState<PermissionViewStatus>('checking');
   const notificationOperationInProgress = useRef(false);
-  const isNotificationOperationRunning =
-    isSchedulingNotification || isReconcilingReminders;
+  const isProfileFocused = useRef(false);
+  const permissionCheckSequence = useRef(0);
+  const currentAppState = useRef<AppStateStatus>(AppState.currentState);
+  const isNotificationActionRunning =
+    isSchedulingNotification || isOpeningSettings;
+
+  const refreshPermissionStatus = useCallback(async () => {
+    const checkSequence = permissionCheckSequence.current + 1;
+    permissionCheckSequence.current = checkSequence;
+
+    try {
+      const status = await getNotificationPermissionStatus();
+
+      if (
+        isProfileFocused.current &&
+        permissionCheckSequence.current === checkSequence
+      ) {
+        setPermissionStatus(status);
+      }
+    } catch (error) {
+      console.error(
+        'Não foi possível verificar a permissão de notificações.',
+        error
+      );
+
+      if (
+        isProfileFocused.current &&
+        permissionCheckSequence.current === checkSequence
+      ) {
+        setPermissionStatus('error');
+      }
+    }
+  }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      isProfileFocused.current = true;
+      currentAppState.current = AppState.currentState;
+      void refreshPermissionStatus();
+
+      const subscription = AppState.addEventListener(
+        'change',
+        (nextAppState) => {
+          const previousAppState = currentAppState.current;
+          currentAppState.current = nextAppState;
+
+          const returnedToActive =
+            nextAppState === 'active' &&
+            (previousAppState === 'background' ||
+              previousAppState === 'inactive');
+
+          if (returnedToActive) {
+            void refreshPermissionStatus();
+          }
+        }
+      );
+
+      return () => {
+        isProfileFocused.current = false;
+        permissionCheckSequence.current += 1;
+        subscription.remove();
+      };
+    }, [refreshPermissionStatus])
+  );
 
   function handleLogout() {
     router.replace(loginRoute);
@@ -55,7 +145,8 @@ export default function ProfileScreen() {
     try {
       await configureAndroidNotificationChannel();
 
-      let hasPermission = await hasNotificationPermission();
+      let hasPermission =
+        (await getNotificationPermissionStatus()) === 'granted';
 
       if (!hasPermission) {
         hasPermission = await requestNotificationPermission();
@@ -63,8 +154,8 @@ export default function ProfileScreen() {
 
       if (!hasPermission) {
         Alert.alert(
-          'Permissão necessária',
-          'As notificações estão desativadas. Autorize o Expo Go nas configurações do Android para realizar o teste.'
+          'Notificações não permitidas',
+          'Não foi possível autorizar as notificações. Se elas estiverem bloqueadas, abra as configurações do celular.'
         );
         return;
       }
@@ -82,63 +173,40 @@ export default function ProfileScreen() {
       );
     } finally {
       notificationOperationInProgress.current = false;
+      await refreshPermissionStatus();
       setIsSchedulingNotification(false);
     }
   }
 
-  async function handleReconcileTaskReminders() {
+  async function handleOpenSettings() {
     if (notificationOperationInProgress.current) {
       return;
     }
 
     notificationOperationInProgress.current = true;
-    setIsReconcilingReminders(true);
+    setIsOpeningSettings(true);
 
     try {
-      const summary = await reconcileTaskReminders(tasks, {
-        requestPermission: true,
-      });
-      const summaryMessage = [
-        `Mantidos: ${summary.kept}`,
-        `Agendados: ${summary.scheduled}`,
-        `Cancelados: ${summary.cancelled}`,
-        `Ignorados: ${summary.skipped}`,
-        `Erros: ${summary.errors.length}`,
-      ].join('\n');
-
-      if (summary.permissionStatus === 'denied') {
-        Alert.alert(
-          'Permissão necessária',
-          `As notificações estão desativadas. Nenhum lembrete foi agendado.\n\n${summaryMessage}`
-        );
-        return;
-      }
-
-      if (summary.permissionStatus === 'error') {
-        Alert.alert(
-          'Não foi possível verificar a permissão',
-          `A sincronização não pôde agendar lembretes.\n\n${summaryMessage}`
-        );
-        return;
-      }
-
-      Alert.alert(
-        summary.errors.length > 0
-          ? 'Sincronização concluída com avisos'
-          : 'Lembretes sincronizados',
-        summaryMessage
-      );
+      await Linking.openSettings();
     } catch (error) {
-      console.error('Não foi possível sincronizar os lembretes das tarefas.', error);
+      console.error('Não foi possível abrir as configurações do celular.', error);
       Alert.alert(
-        'Não foi possível sincronizar',
-        'Os lembretes das tarefas não puderam ser sincronizados. Tente novamente.'
+        'Não foi possível abrir as configurações',
+        'Abra manualmente as configurações do aplicativo no Android e verifique a permissão de notificações.'
       );
     } finally {
       notificationOperationInProgress.current = false;
-      setIsReconcilingReminders(false);
+      setIsOpeningSettings(false);
     }
   }
+
+  const permissionStatusLabel = getPermissionStatusLabel(permissionStatus);
+  const permissionStatusColor =
+    permissionStatus === 'granted'
+      ? colors.primaryDark
+      : permissionStatus === 'denied' || permissionStatus === 'error'
+        ? colors.danger
+        : colors.text;
 
   return (
     <SafeAreaView edges={['top']} style={styles.safeArea}>
@@ -183,26 +251,69 @@ export default function ProfileScreen() {
             </View>
             <View style={styles.notificationHeaderText}>
               <Text style={styles.notificationTitle}>
-                Teste de notificações
+                Configurações de lembretes
               </Text>
               <Text style={styles.notificationDescription}>
-                Valide o recebimento de um lembrete local neste dispositivo.
+                Tarefas pendentes podem gerar um lembrete às 18:00 no dia
+                anterior e outro às 08:00 no dia do prazo. Se o horário já
+                tiver passado, o lembrete não será enviado.
               </Text>
             </View>
           </View>
 
+          <View
+            accessible
+            accessibilityLabel={permissionStatusLabel}
+            accessibilityLiveRegion="polite"
+            style={[
+              styles.permissionStatus,
+              permissionStatus === 'granted' &&
+                styles.permissionStatusGranted,
+              permissionStatus === 'denied' &&
+                styles.permissionStatusDenied,
+              permissionStatus === 'undetermined' &&
+                styles.permissionStatusUndetermined,
+              permissionStatus === 'error' && styles.permissionStatusDenied,
+            ]}>
+            {permissionStatus === 'checking' ? (
+              <ActivityIndicator color={colors.textMuted} size="small" />
+            ) : (
+              <MaterialIcons
+                color={permissionStatusColor}
+                name={
+                  permissionStatus === 'granted'
+                    ? 'check-circle'
+                    : permissionStatus === 'denied'
+                      ? 'notifications-off'
+                      : permissionStatus === 'undetermined'
+                        ? 'help-outline'
+                        : 'error-outline'
+                }
+                size={20}
+              />
+            )}
+            <Text
+              style={[
+                styles.permissionStatusText,
+                { color: permissionStatusColor },
+              ]}>
+              {permissionStatusLabel}
+            </Text>
+          </View>
+
           <Pressable
+            accessibilityLabel="Testar notificação local"
             accessibilityRole="button"
             accessibilityState={{
               busy: isSchedulingNotification,
-              disabled: isNotificationOperationRunning,
+              disabled: isNotificationActionRunning,
             }}
-            disabled={isNotificationOperationRunning}
+            disabled={isNotificationActionRunning}
             onPress={handleTestNotification}
             style={({ pressed }) => [
               styles.notificationButton,
               pressed && styles.buttonPressed,
-              isNotificationOperationRunning && styles.disabledButton,
+              isNotificationActionRunning && styles.disabledButton,
             ]}>
             {isSchedulingNotification ? (
               <ActivityIndicator color={colors.white} size="small" />
@@ -215,55 +326,42 @@ export default function ProfileScreen() {
             )}
             <Text style={styles.notificationButtonText}>
               {isSchedulingNotification
-                ? 'Agendando...'
-                : 'Enviar notificação de teste'}
+                ? 'Preparando teste...'
+                : 'Testar notificação'}
             </Text>
           </Pressable>
-        </View>
 
-        <View style={styles.notificationSection}>
-          <View style={styles.notificationHeader}>
-            <View style={styles.notificationIcon}>
-              <MaterialIcons
-                color={colors.primaryDark}
-                name="event-repeat"
-                size={22}
-              />
-            </View>
-            <View style={styles.notificationHeaderText}>
-              <Text style={styles.notificationTitle}>
-                Lembretes das tarefas
+          {permissionStatus === 'denied' ? (
+            <Pressable
+              accessibilityLabel="Abrir configurações de notificações do celular"
+              accessibilityRole="button"
+              accessibilityState={{
+                busy: isOpeningSettings,
+                disabled: isNotificationActionRunning,
+              }}
+              disabled={isNotificationActionRunning}
+              onPress={handleOpenSettings}
+              style={({ pressed }) => [
+                styles.settingsButton,
+                pressed && styles.buttonPressed,
+                isNotificationActionRunning && styles.disabledButton,
+              ]}>
+              {isOpeningSettings ? (
+                <ActivityIndicator color={colors.primaryDark} size="small" />
+              ) : (
+                <MaterialIcons
+                  color={colors.primaryDark}
+                  name="settings"
+                  size={20}
+                />
+              )}
+              <Text style={styles.settingsButtonText}>
+                {isOpeningSettings
+                  ? 'Abrindo configurações...'
+                  : 'Abrir configurações do celular'}
               </Text>
-              <Text style={styles.notificationDescription}>
-                Sincronize manualmente os lembretes locais das tarefas pendentes.
-              </Text>
-            </View>
-          </View>
-
-          <Pressable
-            accessibilityRole="button"
-            accessibilityState={{
-              busy: isReconcilingReminders,
-              disabled: isNotificationOperationRunning,
-            }}
-            disabled={isNotificationOperationRunning}
-            onPress={handleReconcileTaskReminders}
-            style={({ pressed }) => [
-              styles.notificationButton,
-              pressed && styles.buttonPressed,
-              isNotificationOperationRunning && styles.disabledButton,
-            ]}>
-            {isReconcilingReminders ? (
-              <ActivityIndicator color={colors.white} size="small" />
-            ) : (
-              <MaterialIcons color={colors.white} name="sync" size={20} />
-            )}
-            <Text style={styles.notificationButtonText}>
-              {isReconcilingReminders
-                ? 'Sincronizando...'
-                : 'Sincronizar lembretes das tarefas'}
-            </Text>
-          </Pressable>
+            </Pressable>
+          ) : null}
         </View>
 
         <Pressable
@@ -410,6 +508,30 @@ const styles = StyleSheet.create({
     lineHeight: 18,
     marginTop: spacing.xs,
   },
+  permissionStatus: {
+    alignItems: 'center',
+    backgroundColor: colors.screen,
+    borderRadius: 12,
+    flexDirection: 'row',
+    gap: spacing.sm,
+    marginTop: spacing.md,
+    minHeight: 44,
+    paddingHorizontal: spacing.md,
+  },
+  permissionStatusGranted: {
+    backgroundColor: colors.primarySoft,
+  },
+  permissionStatusDenied: {
+    backgroundColor: colors.dangerSoft,
+  },
+  permissionStatusUndetermined: {
+    backgroundColor: colors.warningSoft,
+  },
+  permissionStatusText: {
+    flex: 1,
+    fontSize: 13,
+    fontWeight: '700',
+  },
   notificationButton: {
     alignItems: 'center',
     backgroundColor: colors.primary,
@@ -424,6 +546,23 @@ const styles = StyleSheet.create({
     color: colors.white,
     fontSize: 14,
     fontWeight: '800',
+  },
+  settingsButton: {
+    alignItems: 'center',
+    backgroundColor: colors.primarySoft,
+    borderRadius: 12,
+    flexDirection: 'row',
+    gap: spacing.sm,
+    justifyContent: 'center',
+    marginTop: spacing.sm,
+    minHeight: 48,
+    paddingHorizontal: spacing.md,
+  },
+  settingsButtonText: {
+    color: colors.primaryDark,
+    fontSize: 14,
+    fontWeight: '800',
+    textAlign: 'center',
   },
   disabledButton: {
     opacity: 0.65,
