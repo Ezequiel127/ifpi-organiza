@@ -1,8 +1,23 @@
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { router, type Href } from 'expo-router';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useRef, useState } from 'react';
+import {
+  ActivityIndicator,
+  Alert,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import {
+  configureAndroidNotificationChannel,
+  hasNotificationPermission,
+  requestNotificationPermission,
+  scheduleLocalTestNotification,
+} from '@/src/services/notificationsService';
 import { colors } from '@/src/theme/colors';
 import { spacing } from '@/src/theme/spacing';
 
@@ -15,8 +30,54 @@ const profileDetails = [
 const loginRoute = '/(auth)/login' as Href;
 
 export default function ProfileScreen() {
+  const [isSchedulingNotification, setIsSchedulingNotification] =
+    useState(false);
+  const notificationTestInProgress = useRef(false);
+
   function handleLogout() {
     router.replace(loginRoute);
+  }
+
+  async function handleTestNotification() {
+    if (notificationTestInProgress.current) {
+      return;
+    }
+
+    notificationTestInProgress.current = true;
+    setIsSchedulingNotification(true);
+
+    try {
+      await configureAndroidNotificationChannel();
+
+      let hasPermission = await hasNotificationPermission();
+
+      if (!hasPermission) {
+        hasPermission = await requestNotificationPermission();
+      }
+
+      if (!hasPermission) {
+        Alert.alert(
+          'Permissão necessária',
+          'As notificações estão desativadas. Autorize o Expo Go nas configurações do Android para realizar o teste.'
+        );
+        return;
+      }
+
+      await scheduleLocalTestNotification();
+      Alert.alert(
+        'Notificação agendada',
+        'Aguarde cerca de 5 segundos para receber a notificação de teste.'
+      );
+    } catch (error) {
+      console.error('Não foi possível agendar a notificação de teste.', error);
+      Alert.alert(
+        'Não foi possível enviar',
+        'O teste de notificação não pôde ser agendado. Tente novamente.'
+      );
+    } finally {
+      notificationTestInProgress.current = false;
+      setIsSchedulingNotification(false);
+    }
   }
 
   return (
@@ -49,6 +110,55 @@ export default function ProfileScreen() {
               </View>
             ))}
           </View>
+        </View>
+
+        <View style={styles.notificationSection}>
+          <View style={styles.notificationHeader}>
+            <View style={styles.notificationIcon}>
+              <MaterialIcons
+                color={colors.primaryDark}
+                name="notifications-active"
+                size={22}
+              />
+            </View>
+            <View style={styles.notificationHeaderText}>
+              <Text style={styles.notificationTitle}>
+                Teste de notificações
+              </Text>
+              <Text style={styles.notificationDescription}>
+                Valide o recebimento de um lembrete local neste dispositivo.
+              </Text>
+            </View>
+          </View>
+
+          <Pressable
+            accessibilityRole="button"
+            accessibilityState={{
+              busy: isSchedulingNotification,
+              disabled: isSchedulingNotification,
+            }}
+            disabled={isSchedulingNotification}
+            onPress={handleTestNotification}
+            style={({ pressed }) => [
+              styles.notificationButton,
+              pressed && styles.buttonPressed,
+              isSchedulingNotification && styles.disabledButton,
+            ]}>
+            {isSchedulingNotification ? (
+              <ActivityIndicator color={colors.white} size="small" />
+            ) : (
+              <MaterialIcons
+                color={colors.white}
+                name="notifications"
+                size={20}
+              />
+            )}
+            <Text style={styles.notificationButtonText}>
+              {isSchedulingNotification
+                ? 'Agendando...'
+                : 'Enviar notificação de teste'}
+            </Text>
+          </Pressable>
         </View>
 
         <Pressable
@@ -159,6 +269,59 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '700',
     marginTop: spacing.xs,
+  },
+  notificationSection: {
+    backgroundColor: colors.card,
+    borderColor: colors.border,
+    borderRadius: 16,
+    borderWidth: 1,
+    marginTop: spacing.lg,
+    padding: spacing.md,
+  },
+  notificationHeader: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: spacing.md,
+  },
+  notificationIcon: {
+    alignItems: 'center',
+    backgroundColor: colors.primarySoft,
+    borderRadius: 12,
+    height: 44,
+    justifyContent: 'center',
+    width: 44,
+  },
+  notificationHeaderText: {
+    flex: 1,
+  },
+  notificationTitle: {
+    color: colors.text,
+    fontSize: 15,
+    fontWeight: '800',
+  },
+  notificationDescription: {
+    color: colors.textMuted,
+    fontSize: 12,
+    lineHeight: 18,
+    marginTop: spacing.xs,
+  },
+  notificationButton: {
+    alignItems: 'center',
+    backgroundColor: colors.primary,
+    borderRadius: 12,
+    flexDirection: 'row',
+    gap: spacing.sm,
+    justifyContent: 'center',
+    marginTop: spacing.md,
+    minHeight: 48,
+  },
+  notificationButtonText: {
+    color: colors.white,
+    fontSize: 14,
+    fontWeight: '800',
+  },
+  disabledButton: {
+    opacity: 0.65,
   },
   logoutButton: {
     alignItems: 'center',
