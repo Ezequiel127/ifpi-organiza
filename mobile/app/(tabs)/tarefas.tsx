@@ -8,6 +8,7 @@ import {
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -16,9 +17,10 @@ import { useTasks } from '@/src/contexts/TasksContext';
 import { colors } from '@/src/theme/colors';
 import { spacing } from '@/src/theme/spacing';
 import type { Task } from '@/src/types/task';
-import { formatBrazilianDate } from '@/src/utils/date';
+import { formatBrazilianDate, isValidISODate } from '@/src/utils/date';
 
 type Filter = 'all' | 'pending' | 'completed';
+type SortOption = 'deadlineAsc' | 'deadlineDesc' | 'recent';
 
 const filters: { label: string; value: Filter }[] = [
   { label: 'Todas', value: 'all' },
@@ -26,30 +28,128 @@ const filters: { label: string; value: Filter }[] = [
   { label: 'Concluídas', value: 'completed' },
 ];
 
+const sortOptions: { label: string; value: SortOption }[] = [
+  { label: 'Prazo mais próximo', value: 'deadlineAsc' },
+  { label: 'Prazo mais distante', value: 'deadlineDesc' },
+  { label: 'Mais recentes', value: 'recent' },
+];
+
+const DIACRITICS_PATTERN = /[\u0300-\u036f]/g;
 const newTaskRoute = '/nova-tarefa' as Href;
+
+function normalizeSearchValue(value: string) {
+  return value
+    .trim()
+    .normalize('NFD')
+    .replace(DIACRITICS_PATTERN, '')
+    .toLocaleLowerCase('pt-BR');
+}
+
+function compareCreatedAtDescending(first: Task, second: Task) {
+  const firstTimestamp = Date.parse(first.createdAt);
+  const secondTimestamp = Date.parse(second.createdAt);
+  const firstIsValid = Number.isFinite(firstTimestamp);
+  const secondIsValid = Number.isFinite(secondTimestamp);
+
+  if (firstIsValid && secondIsValid) {
+    return secondTimestamp - firstTimestamp;
+  }
+
+  if (firstIsValid) {
+    return -1;
+  }
+
+  if (secondIsValid) {
+    return 1;
+  }
+
+  return 0;
+}
+
+function compareDeadlines(
+  first: Task,
+  second: Task,
+  direction: 'ascending' | 'descending'
+) {
+  const firstIsValid = isValidISODate(first.deadline);
+  const secondIsValid = isValidISODate(second.deadline);
+
+  if (firstIsValid && secondIsValid) {
+    const comparison = first.deadline.localeCompare(second.deadline);
+    return direction === 'ascending' ? comparison : -comparison;
+  }
+
+  if (firstIsValid) {
+    return -1;
+  }
+
+  if (secondIsValid) {
+    return 1;
+  }
+
+  return 0;
+}
+
+function compareTasks(first: Task, second: Task, sortOption: SortOption) {
+  let comparison = 0;
+
+  if (sortOption === 'deadlineAsc') {
+    comparison = compareDeadlines(first, second, 'ascending');
+  } else if (sortOption === 'deadlineDesc') {
+    comparison = compareDeadlines(first, second, 'descending');
+  } else {
+    comparison = compareCreatedAtDescending(first, second);
+  }
+
+  if (comparison !== 0) {
+    return comparison;
+  }
+
+  const recentComparison = compareCreatedAtDescending(first, second);
+
+  if (recentComparison !== 0) {
+    return recentComparison;
+  }
+
+  return first.id.localeCompare(second.id);
+}
 
 export default function TasksScreen() {
   const { deleteTask, tasks, toggleTask } = useTasks();
   const [activeFilter, setActiveFilter] = useState<Filter>('all');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [sortOption, setSortOption] = useState<SortOption>('deadlineAsc');
   const [deletingTaskIds, setDeletingTaskIds] = useState<Set<string>>(
     () => new Set()
   );
+  const normalizedSearchQuery = normalizeSearchValue(searchQuery);
 
-  const visibleTasks = useMemo(
-    () =>
-      tasks.filter((task) => {
-        if (activeFilter === 'pending') {
-          return !task.completed;
-        }
+  const visibleTasks = useMemo(() => {
+    const filteredByStatus = tasks.filter((task) => {
+      if (activeFilter === 'pending') {
+        return !task.completed;
+      }
 
-        if (activeFilter === 'completed') {
-          return task.completed;
-        }
+      if (activeFilter === 'completed') {
+        return task.completed;
+      }
 
-        return true;
-      }),
-    [activeFilter, tasks]
-  );
+      return true;
+    });
+    const filteredBySearch = normalizedSearchQuery
+      ? filteredByStatus.filter((task) => {
+          const searchableContent = normalizeSearchValue(
+            `${task.title} ${task.subject}`
+          );
+
+          return searchableContent.includes(normalizedSearchQuery);
+        })
+      : filteredByStatus;
+
+    return [...filteredBySearch].sort((first, second) =>
+      compareTasks(first, second, sortOption)
+    );
+  }, [activeFilter, normalizedSearchQuery, sortOption, tasks]);
 
   function openNewTask() {
     router.push(newTaskRoute);
@@ -119,6 +219,34 @@ export default function TasksScreen() {
           </Pressable>
         </View>
 
+        <View style={styles.searchContainer}>
+          <MaterialIcons color={colors.textMuted} name="search" size={21} />
+          <TextInput
+            accessibilityLabel="Pesquisar tarefas por título ou disciplina"
+            autoCapitalize="none"
+            autoCorrect={false}
+            onChangeText={setSearchQuery}
+            placeholder="Pesquisar por título ou disciplina"
+            placeholderTextColor={colors.textMuted}
+            returnKeyType="search"
+            style={styles.searchInput}
+            value={searchQuery}
+          />
+          {searchQuery.length > 0 ? (
+            <Pressable
+              accessibilityLabel="Limpar pesquisa"
+              accessibilityRole="button"
+              hitSlop={8}
+              onPress={() => setSearchQuery('')}
+              style={({ pressed }) => [
+                styles.clearSearchButton,
+                pressed && styles.buttonPressed,
+              ]}>
+              <MaterialIcons color={colors.textMuted} name="close" size={19} />
+            </Pressable>
+          ) : null}
+        </View>
+
         <View style={styles.filters}>
           {filters.map((filter) => {
             const isActive = filter.value === activeFilter;
@@ -135,6 +263,38 @@ export default function TasksScreen() {
               </Pressable>
             );
           })}
+        </View>
+
+        <View style={styles.sortSection}>
+          <Text style={styles.sortLabel}>Ordenar por</Text>
+          <View style={styles.sortOptions}>
+            {sortOptions.map((option) => {
+              const isActive = option.value === sortOption;
+
+              return (
+                <Pressable
+                  accessibilityLabel={`Ordenar por ${option.label.toLocaleLowerCase(
+                    'pt-BR'
+                  )}`}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected: isActive }}
+                  key={option.value}
+                  onPress={() => setSortOption(option.value)}
+                  style={[
+                    styles.sortButton,
+                    isActive && styles.activeSortButton,
+                  ]}>
+                  <Text
+                    style={[
+                      styles.sortButtonText,
+                      isActive && styles.activeSortButtonText,
+                    ]}>
+                    {option.label}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </View>
         </View>
 
         <View style={styles.taskList}>
@@ -223,7 +383,17 @@ export default function TasksScreen() {
 
           {visibleTasks.length === 0 ? (
             <View style={styles.emptyState}>
-              <Text style={styles.emptyStateText}>Nenhuma tarefa neste filtro.</Text>
+              <MaterialIcons
+                color={colors.textMuted}
+                name="search-off"
+                size={32}
+              />
+              <Text style={styles.emptyStateTitle}>Nenhuma tarefa encontrada</Text>
+              <Text style={styles.emptyStateText}>
+                {normalizedSearchQuery
+                  ? 'Tente limpar a pesquisa ou selecionar outro filtro.'
+                  : 'Não há tarefas disponíveis no filtro selecionado.'}
+              </Text>
             </View>
           ) : null}
         </View>
@@ -282,10 +452,35 @@ const styles = StyleSheet.create({
   buttonPressed: {
     opacity: 0.85,
   },
+  searchContainer: {
+    alignItems: 'center',
+    backgroundColor: colors.card,
+    borderColor: colors.border,
+    borderRadius: 12,
+    borderWidth: 1,
+    flexDirection: 'row',
+    marginTop: spacing.lg,
+    minHeight: 50,
+    paddingHorizontal: spacing.md,
+  },
+  searchInput: {
+    color: colors.text,
+    flex: 1,
+    fontSize: 14,
+    minHeight: 48,
+    paddingHorizontal: spacing.sm,
+  },
+  clearSearchButton: {
+    alignItems: 'center',
+    borderRadius: 16,
+    height: 32,
+    justifyContent: 'center',
+    width: 32,
+  },
   filters: {
     flexDirection: 'row',
     gap: spacing.sm,
-    marginVertical: spacing.lg,
+    marginTop: spacing.md,
   },
   filterButton: {
     alignItems: 'center',
@@ -309,6 +504,46 @@ const styles = StyleSheet.create({
   },
   activeFilterText: {
     color: colors.white,
+  },
+  sortSection: {
+    marginBottom: spacing.lg,
+    marginTop: spacing.md,
+  },
+  sortLabel: {
+    color: colors.textMuted,
+    fontSize: 12,
+    fontWeight: '700',
+    marginBottom: spacing.sm,
+  },
+  sortOptions: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.sm,
+  },
+  sortButton: {
+    alignItems: 'center',
+    backgroundColor: colors.card,
+    borderColor: colors.border,
+    borderRadius: 9,
+    borderWidth: 1,
+    flexGrow: 1,
+    justifyContent: 'center',
+    minHeight: 38,
+    minWidth: 132,
+    paddingHorizontal: spacing.sm,
+  },
+  activeSortButton: {
+    backgroundColor: colors.primarySoft,
+    borderColor: colors.primary,
+  },
+  sortButtonText: {
+    color: colors.textMuted,
+    fontSize: 11,
+    fontWeight: '700',
+    textAlign: 'center',
+  },
+  activeSortButtonText: {
+    color: colors.primaryDark,
   },
   taskList: {
     gap: spacing.md,
@@ -416,9 +651,18 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     padding: spacing.lg,
   },
+  emptyStateTitle: {
+    color: colors.text,
+    fontSize: 15,
+    fontWeight: '800',
+    marginTop: spacing.sm,
+  },
   emptyStateText: {
     color: colors.textMuted,
-    fontSize: 14,
+    fontSize: 13,
+    lineHeight: 19,
+    marginTop: spacing.xs,
+    textAlign: 'center',
   },
   primaryButton: {
     alignItems: 'center',
