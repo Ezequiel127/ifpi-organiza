@@ -1,32 +1,24 @@
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { router, type Href } from 'expo-router';
+import { useMemo } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { useTasks } from '@/src/contexts/TasksContext';
 import { colors } from '@/src/theme/colors';
 import { spacing } from '@/src/theme/spacing';
-
-const recentTasks = [
-  {
-    id: '1',
-    title: 'Entregar protótipo mobile',
-    meta: 'Programação para Dispositivos Móveis • 30/07',
-  },
-  {
-    id: '2',
-    title: 'Revisar requisitos do MVP',
-    meta: 'Engenharia de Software • 02/08',
-  },
-  {
-    id: '3',
-    title: 'Preparar apresentação do projeto',
-    meta: 'Projeto Integrador • 05/08',
-  },
-];
+import { formatBrazilianDate, formatLongBrazilianDate } from '@/src/utils/date';
 
 const newTaskRoute = '/nova-tarefa' as Href;
 
 export default function DashboardScreen() {
+  const { tasks, pendingCount, completedCount, nextDeadline, toggleTask } = useTasks();
+
+  const recentTasks = useMemo(
+    () => [...tasks].sort((a, b) => b.createdAt.localeCompare(a.createdAt)).slice(0, 3),
+    [tasks]
+  );
+
   function openNewTask() {
     router.push(newTaskRoute);
   }
@@ -48,11 +40,11 @@ export default function DashboardScreen() {
 
         <View style={styles.summaryRow}>
           <View style={styles.summaryCard}>
-            <Text style={styles.summaryNumber}>3</Text>
+            <Text style={styles.summaryNumber}>{pendingCount}</Text>
             <Text style={styles.summaryLabel}>Pendentes</Text>
           </View>
           <View style={styles.summaryCard}>
-            <Text style={styles.summaryNumber}>1</Text>
+            <Text style={styles.summaryNumber}>{completedCount}</Text>
             <Text style={styles.summaryLabel}>Concluídas</Text>
           </View>
         </View>
@@ -61,10 +53,16 @@ export default function DashboardScreen() {
           <View style={styles.tag}>
             <Text style={styles.tagText}>Próximo prazo</Text>
           </View>
-          <Text style={styles.deadlineTitle}>Entregar protótipo mobile</Text>
+          <Text style={styles.deadlineTitle}>
+            {nextDeadline?.title ?? 'Nenhuma tarefa pendente'}
+          </Text>
           <View style={styles.deadlineMeta}>
             <MaterialIcons color={colors.primaryDark} name="event" size={18} />
-            <Text style={styles.deadlineText}>30 de julho • Programação Mobile</Text>
+            <Text style={styles.deadlineText}>
+              {nextDeadline
+                ? `${formatLongBrazilianDate(nextDeadline.deadline)} • ${nextDeadline.subject}`
+                : 'Todas as atividades cadastradas foram concluídas.'}
+            </Text>
           </View>
         </View>
 
@@ -83,15 +81,36 @@ export default function DashboardScreen() {
 
         <View style={styles.taskList}>
           {recentTasks.map((task) => (
-            <View key={task.id} style={styles.taskCard}>
-              <View style={styles.taskStatus} />
+            <View key={task.id} style={[styles.taskCard, task.completed && styles.completedTask]}>
+              <Pressable
+                accessibilityLabel={`Marcar ${task.title} como ${
+                  task.completed ? 'pendente' : 'concluída'
+                }`}
+                accessibilityRole="checkbox"
+                accessibilityState={{ checked: task.completed }}
+                hitSlop={8}
+                onPress={() => toggleTask(task.id)}
+                style={[styles.taskStatus, task.completed && styles.completedTaskStatus]}>
+                {task.completed ? (
+                  <MaterialIcons color={colors.white} name="check" size={16} />
+                ) : null}
+              </Pressable>
               <View style={styles.taskContent}>
-                <Text style={styles.taskTitle}>{task.title}</Text>
-                <Text style={styles.taskMeta}>{task.meta}</Text>
+                <Text style={[styles.taskTitle, task.completed && styles.completedTaskTitle]}>
+                  {task.title}
+                </Text>
+                <Text style={styles.taskMeta}>
+                  {task.subject} • {formatBrazilianDate(task.deadline)}
+                </Text>
               </View>
-              <MaterialIcons color={colors.textMuted} name="chevron-right" size={22} />
             </View>
           ))}
+
+          {recentTasks.length === 0 ? (
+            <View style={styles.emptyState}>
+              <Text style={styles.emptyStateText}>Nenhuma atividade cadastrada.</Text>
+            </View>
+          ) : null}
         </View>
       </ScrollView>
     </SafeAreaView>
@@ -199,6 +218,7 @@ const styles = StyleSheet.create({
     color: colors.textMuted,
     flex: 1,
     fontSize: 14,
+    lineHeight: 20,
   },
   addButton: {
     alignItems: 'center',
@@ -245,13 +265,21 @@ const styles = StyleSheet.create({
     gap: spacing.md,
     padding: spacing.md,
   },
+  completedTask: {
+    opacity: 0.72,
+  },
   taskStatus: {
-    backgroundColor: colors.primarySoft,
+    alignItems: 'center',
+    backgroundColor: colors.card,
     borderColor: colors.primary,
     borderRadius: 6,
     borderWidth: 2,
     height: 24,
+    justifyContent: 'center',
     width: 24,
+  },
+  completedTaskStatus: {
+    backgroundColor: colors.primary,
   },
   taskContent: {
     flex: 1,
@@ -261,10 +289,27 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '700',
   },
+  completedTaskTitle: {
+    color: colors.textMuted,
+    textDecorationLine: 'line-through',
+  },
   taskMeta: {
     color: colors.textMuted,
     fontSize: 12,
     lineHeight: 18,
     marginTop: spacing.xs,
+  },
+  emptyState: {
+    alignItems: 'center',
+    backgroundColor: colors.card,
+    borderColor: colors.border,
+    borderRadius: 14,
+    borderStyle: 'dashed',
+    borderWidth: 1,
+    padding: spacing.lg,
+  },
+  emptyStateText: {
+    color: colors.textMuted,
+    fontSize: 14,
   },
 });

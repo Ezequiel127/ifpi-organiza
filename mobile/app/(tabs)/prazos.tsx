@@ -1,46 +1,32 @@
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
+import { useMemo } from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { useTasks } from '@/src/contexts/TasksContext';
 import { colors } from '@/src/theme/colors';
 import { spacing } from '@/src/theme/spacing';
-
-const deadlines = [
-  {
-    id: '1',
-    day: '30',
-    month: 'JUL',
-    title: 'Entregar protótipo mobile',
-    subject: 'Programação para Dispositivos Móveis',
-    type: 'Trabalho',
-  },
-  {
-    id: '2',
-    day: '02',
-    month: 'AGO',
-    title: 'Revisar requisitos do MVP',
-    subject: 'Engenharia de Software',
-    type: 'Atividade',
-  },
-  {
-    id: '3',
-    day: '05',
-    month: 'AGO',
-    title: 'Apresentar proposta do aplicativo',
-    subject: 'Projeto Integrador',
-    type: 'Seminário',
-  },
-  {
-    id: '4',
-    day: '08',
-    month: 'AGO',
-    title: 'Avaliação da unidade',
-    subject: 'Engenharia de Software',
-    type: 'Prova',
-  },
-];
+import { getBrazilianDateParts } from '@/src/utils/date';
 
 export default function DeadlinesScreen() {
+  const { tasks } = useTasks();
+
+  const deadlines = useMemo(
+    () =>
+      tasks
+        .flatMap((task) => {
+          if (task.completed) {
+            return [];
+          }
+
+          const date = getBrazilianDateParts(task.deadline);
+
+          return date ? [{ task, date }] : [];
+        })
+        .sort((a, b) => a.task.deadline.localeCompare(b.task.deadline)),
+    [tasks]
+  );
+
   return (
     <SafeAreaView edges={['top']} style={styles.safeArea}>
       <ScrollView
@@ -56,8 +42,10 @@ export default function DeadlinesScreen() {
 
         <View style={styles.monthCard}>
           <View>
-            <Text style={styles.monthLabel}>Período atual</Text>
-            <Text style={styles.monthTitle}>Julho e agosto de 2026</Text>
+            <Text style={styles.monthLabel}>Tarefas pendentes</Text>
+            <Text style={styles.monthTitle}>
+              {deadlines.length} {deadlines.length === 1 ? 'prazo válido' : 'prazos válidos'}
+            </Text>
           </View>
           <View style={styles.calendarIcon}>
             <MaterialIcons color={colors.primaryDark} name="calendar-month" size={28} />
@@ -65,21 +53,31 @@ export default function DeadlinesScreen() {
         </View>
 
         <View style={styles.deadlineList}>
-          {deadlines.map((deadline) => (
-            <View key={deadline.id} style={styles.deadlineCard}>
+          {deadlines.map(({ task, date }) => (
+            <View key={task.id} style={styles.deadlineCard}>
               <View style={styles.dateBlock}>
-                <Text style={styles.dateDay}>{deadline.day}</Text>
-                <Text style={styles.dateMonth}>{deadline.month}</Text>
+                <Text style={styles.dateDay}>{date.day}</Text>
+                <Text style={styles.dateMonth}>{date.month}</Text>
               </View>
               <View style={styles.deadlineContent}>
-                <Text style={styles.deadlineTitle}>{deadline.title}</Text>
-                <Text style={styles.deadlineSubject}>{deadline.subject}</Text>
+                <Text style={styles.deadlineTitle}>{task.title}</Text>
+                <Text style={styles.deadlineSubject}>{task.subject}</Text>
                 <View style={styles.typeTag}>
-                  <Text style={styles.typeText}>{deadline.type}</Text>
+                  <Text style={styles.typeText}>{task.type}</Text>
                 </View>
               </View>
             </View>
           ))}
+
+          {deadlines.length === 0 ? (
+            <View style={styles.emptyState}>
+              <MaterialIcons color={colors.primaryDark} name="event-available" size={30} />
+              <Text style={styles.emptyTitle}>Nenhum prazo pendente</Text>
+              <Text style={styles.emptyText}>
+                As tarefas concluídas deixam de aparecer nesta lista.
+              </Text>
+            </View>
+          ) : null}
         </View>
       </ScrollView>
     </SafeAreaView>
@@ -204,5 +202,27 @@ const styles = StyleSheet.create({
     color: colors.text,
     fontSize: 10,
     fontWeight: '800',
+  },
+  emptyState: {
+    alignItems: 'center',
+    backgroundColor: colors.card,
+    borderColor: colors.border,
+    borderRadius: 16,
+    borderStyle: 'dashed',
+    borderWidth: 1,
+    padding: spacing.xl,
+  },
+  emptyTitle: {
+    color: colors.text,
+    fontSize: 16,
+    fontWeight: '800',
+    marginTop: spacing.sm,
+  },
+  emptyText: {
+    color: colors.textMuted,
+    fontSize: 13,
+    lineHeight: 19,
+    marginTop: spacing.xs,
+    textAlign: 'center',
   },
 });

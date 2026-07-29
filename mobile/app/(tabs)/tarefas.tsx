@@ -1,76 +1,43 @@
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { router, type Href } from 'expo-router';
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { useTasks } from '@/src/contexts/TasksContext';
 import { colors } from '@/src/theme/colors';
 import { spacing } from '@/src/theme/spacing';
+import { formatBrazilianDate } from '@/src/utils/date';
 
-type Filter = 'Todas' | 'Pendentes' | 'Concluídas';
+type Filter = 'all' | 'pending' | 'completed';
 
-type Task = {
-  id: string;
-  title: string;
-  subject: string;
-  date: string;
-  type: string;
-  done: boolean;
-};
-
-const filters: Filter[] = ['Todas', 'Pendentes', 'Concluídas'];
-
-const tasks: Task[] = [
-  {
-    id: '1',
-    title: 'Entregar protótipo mobile',
-    subject: 'Programação para Dispositivos Móveis',
-    date: '30/07/2026',
-    type: 'Trabalho',
-    done: false,
-  },
-  {
-    id: '2',
-    title: 'Revisar requisitos do MVP',
-    subject: 'Engenharia de Software',
-    date: '02/08/2026',
-    type: 'Atividade',
-    done: false,
-  },
-  {
-    id: '3',
-    title: 'Preparar apresentação do projeto',
-    subject: 'Projeto Integrador',
-    date: '05/08/2026',
-    type: 'Seminário',
-    done: false,
-  },
-  {
-    id: '4',
-    title: 'Definir identidade visual',
-    subject: 'Programação para Dispositivos Móveis',
-    date: '25/07/2026',
-    type: 'Atividade',
-    done: true,
-  },
+const filters: { label: string; value: Filter }[] = [
+  { label: 'Todas', value: 'all' },
+  { label: 'Pendentes', value: 'pending' },
+  { label: 'Concluídas', value: 'completed' },
 ];
 
 const newTaskRoute = '/nova-tarefa' as Href;
 
 export default function TasksScreen() {
-  const [activeFilter, setActiveFilter] = useState<Filter>('Todas');
+  const { tasks, toggleTask } = useTasks();
+  const [activeFilter, setActiveFilter] = useState<Filter>('all');
 
-  const visibleTasks = tasks.filter((task) => {
-    if (activeFilter === 'Pendentes') {
-      return !task.done;
-    }
+  const visibleTasks = useMemo(
+    () =>
+      tasks.filter((task) => {
+        if (activeFilter === 'pending') {
+          return !task.completed;
+        }
 
-    if (activeFilter === 'Concluídas') {
-      return task.done;
-    }
+        if (activeFilter === 'completed') {
+          return task.completed;
+        }
 
-    return true;
-  });
+        return true;
+      }),
+    [activeFilter, tasks]
+  );
 
   function openNewTask() {
     router.push(newTaskRoute);
@@ -97,16 +64,16 @@ export default function TasksScreen() {
 
         <View style={styles.filters}>
           {filters.map((filter) => {
-            const isActive = filter === activeFilter;
+            const isActive = filter.value === activeFilter;
 
             return (
               <Pressable
                 accessibilityRole="button"
-                key={filter}
-                onPress={() => setActiveFilter(filter)}
+                key={filter.value}
+                onPress={() => setActiveFilter(filter.value)}
                 style={[styles.filterButton, isActive && styles.activeFilterButton]}>
                 <Text style={[styles.filterText, isActive && styles.activeFilterText]}>
-                  {filter}
+                  {filter.label}
                 </Text>
               </Pressable>
             );
@@ -115,24 +82,40 @@ export default function TasksScreen() {
 
         <View style={styles.taskList}>
           {visibleTasks.map((task) => (
-            <View key={task.id} style={[styles.taskCard, task.done && styles.completedTaskCard]}>
-              <View style={[styles.checkBox, task.done && styles.checkedBox]}>
-                {task.done ? (
+            <View
+              key={task.id}
+              style={[styles.taskCard, task.completed && styles.completedTaskCard]}>
+              <Pressable
+                accessibilityLabel={`Marcar ${task.title} como ${
+                  task.completed ? 'pendente' : 'concluída'
+                }`}
+                accessibilityRole="checkbox"
+                accessibilityState={{ checked: task.completed }}
+                hitSlop={8}
+                onPress={() => toggleTask(task.id)}
+                style={[styles.checkBox, task.completed && styles.checkedBox]}>
+                {task.completed ? (
                   <MaterialIcons color={colors.white} name="check" size={16} />
                 ) : null}
-              </View>
+              </Pressable>
               <View style={styles.taskContent}>
-                <Text style={[styles.taskTitle, task.done && styles.completedTaskTitle]}>
+                <Text style={[styles.taskTitle, task.completed && styles.completedTaskTitle]}>
                   {task.title}
                 </Text>
                 <Text style={styles.taskSubject}>{task.subject}</Text>
                 <View style={styles.metaRow}>
                   <Text style={styles.taskType}>{task.type}</Text>
-                  <Text style={styles.taskDate}>{task.date}</Text>
+                  <Text style={styles.taskDate}>{formatBrazilianDate(task.deadline)}</Text>
                 </View>
               </View>
             </View>
           ))}
+
+          {visibleTasks.length === 0 ? (
+            <View style={styles.emptyState}>
+              <Text style={styles.emptyStateText}>Nenhuma tarefa neste filtro.</Text>
+            </View>
+          ) : null}
         </View>
 
         <Pressable
@@ -285,6 +268,19 @@ const styles = StyleSheet.create({
     color: colors.textMuted,
     fontSize: 12,
     fontWeight: '700',
+  },
+  emptyState: {
+    alignItems: 'center',
+    backgroundColor: colors.card,
+    borderColor: colors.border,
+    borderRadius: 14,
+    borderStyle: 'dashed',
+    borderWidth: 1,
+    padding: spacing.lg,
+  },
+  emptyStateText: {
+    color: colors.textMuted,
+    fontSize: 14,
   },
   primaryButton: {
     alignItems: 'center',

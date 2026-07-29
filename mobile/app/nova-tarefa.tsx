@@ -1,8 +1,7 @@
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
-import { router } from 'expo-router';
+import { router, type Href } from 'expo-router';
 import { useState } from 'react';
 import {
-  Alert,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -14,21 +13,68 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { useTasks } from '@/src/contexts/TasksContext';
 import { colors } from '@/src/theme/colors';
 import { spacing } from '@/src/theme/spacing';
+import { isValidISODate } from '@/src/utils/date';
+
+type FormErrors = Partial<
+  Record<'title' | 'subject' | 'deadline' | 'type', string>
+>;
+
+const tasksRoute = '/(tabs)/tarefas' as Href;
 
 export default function NewTaskScreen() {
+  const { addTask } = useTasks();
   const [title, setTitle] = useState('');
   const [subject, setSubject] = useState('');
   const [deadline, setDeadline] = useState('');
   const [type, setType] = useState('');
   const [description, setDescription] = useState('');
+  const [errors, setErrors] = useState<FormErrors>({});
 
   function handleSave() {
-    Alert.alert(
-      'Tarefa simulada',
-      'O formulário está pronto. A persistência será implementada em uma próxima etapa.'
-    );
+    const normalizedTask = {
+      title: title.trim(),
+      subject: subject.trim(),
+      deadline: deadline.trim(),
+      type: type.trim(),
+      description: description.trim(),
+    };
+    const nextErrors: FormErrors = {};
+
+    if (!normalizedTask.title) {
+      nextErrors.title = 'Informe o título da tarefa.';
+    }
+
+    if (!normalizedTask.subject) {
+      nextErrors.subject = 'Informe a disciplina.';
+    }
+
+    if (!normalizedTask.deadline) {
+      nextErrors.deadline = 'Informe o prazo.';
+    } else if (!isValidISODate(normalizedTask.deadline)) {
+      nextErrors.deadline = 'Use uma data válida no formato YYYY-MM-DD.';
+    }
+
+    if (!normalizedTask.type) {
+      nextErrors.type = 'Informe o tipo da tarefa.';
+    }
+
+    setErrors(nextErrors);
+
+    if (Object.keys(nextErrors).length > 0) {
+      return;
+    }
+
+    addTask(normalizedTask);
+    setTitle('');
+    setSubject('');
+    setDeadline('');
+    setType('');
+    setDescription('');
+    setErrors({});
+    router.replace(tasksRoute);
   }
 
   return (
@@ -67,9 +113,10 @@ export default function NewTaskScreen() {
                 onChangeText={setTitle}
                 placeholder="Ex.: Lista de Programação Mobile"
                 placeholderTextColor={colors.textMuted}
-                style={styles.input}
+                style={[styles.input, errors.title && styles.inputError]}
                 value={title}
               />
+              {errors.title ? <Text style={styles.errorText}>{errors.title}</Text> : null}
             </View>
 
             <View style={styles.field}>
@@ -79,22 +126,25 @@ export default function NewTaskScreen() {
                 onChangeText={setSubject}
                 placeholder="Ex.: Programação para Dispositivos Móveis"
                 placeholderTextColor={colors.textMuted}
-                style={styles.input}
+                style={[styles.input, errors.subject && styles.inputError]}
                 value={subject}
               />
+              {errors.subject ? <Text style={styles.errorText}>{errors.subject}</Text> : null}
             </View>
 
             <View style={styles.field}>
               <Text style={styles.label}>Prazo</Text>
               <TextInput
-                accessibilityLabel="Prazo"
+                accessibilityLabel="Prazo no formato ano, mês e dia"
+                autoCapitalize="none"
                 keyboardType="numbers-and-punctuation"
                 onChangeText={setDeadline}
-                placeholder="DD/MM/AAAA"
+                placeholder="YYYY-MM-DD"
                 placeholderTextColor={colors.textMuted}
-                style={styles.input}
+                style={[styles.input, errors.deadline && styles.inputError]}
                 value={deadline}
               />
+              {errors.deadline ? <Text style={styles.errorText}>{errors.deadline}</Text> : null}
             </View>
 
             <View style={styles.field}>
@@ -104,9 +154,10 @@ export default function NewTaskScreen() {
                 onChangeText={setType}
                 placeholder="Ex.: Trabalho, prova ou seminário"
                 placeholderTextColor={colors.textMuted}
-                style={styles.input}
+                style={[styles.input, errors.type && styles.inputError]}
                 value={type}
               />
+              {errors.type ? <Text style={styles.errorText}>{errors.type}</Text> : null}
             </View>
 
             <View style={styles.field}>
@@ -214,6 +265,14 @@ const styles = StyleSheet.create({
     fontSize: 15,
     minHeight: 50,
     paddingHorizontal: spacing.md,
+  },
+  inputError: {
+    borderColor: colors.danger,
+  },
+  errorText: {
+    color: colors.danger,
+    fontSize: 12,
+    fontWeight: '600',
   },
   textArea: {
     minHeight: 112,
