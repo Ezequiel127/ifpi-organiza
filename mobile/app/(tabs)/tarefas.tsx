@@ -55,6 +55,10 @@ export default function TasksScreen() {
     router.push(newTaskRoute);
   }
 
+  function openEditTask(id: string) {
+    router.push(`/editar-tarefa/${encodeURIComponent(id)}` as Href);
+  }
+
   async function handleDelete(task: Pick<Task, 'id' | 'title'>) {
     setDeletingTaskIds((currentIds) => new Set(currentIds).add(task.id));
     const wasDeleted = await deleteTask(task.id);
@@ -146,7 +150,11 @@ export default function TasksScreen() {
                     task.completed ? 'pendente' : 'concluída'
                   }`}
                   accessibilityRole="checkbox"
-                  accessibilityState={{ checked: task.completed }}
+                  accessibilityState={{
+                    checked: task.completed,
+                    disabled: isDeleting,
+                  }}
+                  disabled={isDeleting}
                   hitSlop={8}
                   onPress={() => toggleTask(task.id)}
                   style={[styles.checkBox, task.completed && styles.checkedBox]}>
@@ -167,28 +175,48 @@ export default function TasksScreen() {
                     </Text>
                   </View>
                 </View>
-                <Pressable
-                  accessibilityLabel={`Excluir tarefa ${task.title}`}
-                  accessibilityRole="button"
-                  accessibilityState={{ busy: isDeleting, disabled: isDeleting }}
-                  disabled={isDeleting}
-                  hitSlop={8}
-                  onPress={() => confirmDelete(task)}
-                  style={({ pressed }) => [
-                    styles.deleteButton,
-                    pressed && styles.deleteButtonPressed,
-                    isDeleting && styles.deleteButtonDisabled,
-                  ]}>
-                  {isDeleting ? (
-                    <ActivityIndicator color={colors.danger} size="small" />
-                  ) : (
+                <View style={styles.actionColumn}>
+                  <Pressable
+                    accessibilityLabel={`Editar tarefa ${task.title}`}
+                    accessibilityRole="button"
+                    accessibilityState={{ disabled: isDeleting }}
+                    disabled={isDeleting}
+                    hitSlop={6}
+                    onPress={() => openEditTask(task.id)}
+                    style={({ pressed }) => [
+                      styles.editButton,
+                      pressed && styles.editButtonPressed,
+                      isDeleting && styles.actionButtonDisabled,
+                    ]}>
                     <MaterialIcons
-                      color={colors.danger}
-                      name="delete-outline"
+                      color={colors.primaryDark}
+                      name="edit"
                       size={20}
                     />
-                  )}
-                </Pressable>
+                  </Pressable>
+                  <Pressable
+                    accessibilityLabel={`Excluir tarefa ${task.title}`}
+                    accessibilityRole="button"
+                    accessibilityState={{ busy: isDeleting, disabled: isDeleting }}
+                    disabled={isDeleting}
+                    hitSlop={6}
+                    onPress={() => confirmDelete(task)}
+                    style={({ pressed }) => [
+                      styles.deleteButton,
+                      pressed && styles.deleteButtonPressed,
+                      isDeleting && styles.actionButtonDisabled,
+                    ]}>
+                    {isDeleting ? (
+                      <ActivityIndicator color={colors.danger} size="small" />
+                    ) : (
+                      <MaterialIcons
+                        color={colors.danger}
+                        name="delete-outline"
+                        size={20}
+                      />
+                    )}
+                  </Pressable>
+                </View>
               </View>
             );
           })}
@@ -312,6 +340,20 @@ const styles = StyleSheet.create({
   checkedBox: {
     backgroundColor: colors.primary,
   },
+  actionColumn: {
+    gap: spacing.sm,
+  },
+  editButton: {
+    alignItems: 'center',
+    backgroundColor: colors.primarySoft,
+    borderRadius: 10,
+    height: 36,
+    justifyContent: 'center',
+    width: 36,
+  },
+  editButtonPressed: {
+    opacity: 0.75,
+  },
   deleteButton: {
     alignItems: 'center',
     backgroundColor: colors.dangerSoft,
@@ -320,7 +362,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     width: 36,
   },
-  deleteButtonDisabled: {
+  actionButtonDisabled: {
     opacity: 0.6,
   },
   deleteButtonPressed: {

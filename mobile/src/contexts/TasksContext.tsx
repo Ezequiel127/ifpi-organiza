@@ -17,11 +17,12 @@ import {
   deleteTask as deleteTaskFromDatabase,
   getAllTasks,
   insertTask,
+  updateTask as updateTaskInDatabase,
   updateTaskCompleted,
 } from '@/src/database/tasksRepository';
 import { colors } from '@/src/theme/colors';
 import { spacing } from '@/src/theme/spacing';
-import type { NewTask, Task } from '@/src/types/task';
+import type { NewTask, Task, TaskUpdate } from '@/src/types/task';
 import { isValidISODate } from '@/src/utils/date';
 
 type TasksState = {
@@ -32,12 +33,14 @@ type TasksAction =
   | { type: 'load'; payload: Task[] }
   | { type: 'add'; payload: Task }
   | { type: 'remove'; payload: { id: string } }
+  | { type: 'update'; payload: { id: string; changes: TaskUpdate } }
   | { type: 'setCompleted'; payload: { id: string; completed: boolean } };
 
 type TasksContextValue = {
   tasks: Task[];
   addTask: (task: NewTask) => Promise<boolean>;
   deleteTask: (id: string) => Promise<boolean>;
+  updateTask: (id: string, changes: TaskUpdate) => Promise<boolean>;
   toggleTask: (id: string) => void;
   isLoading: boolean;
   pendingCount: number;
@@ -70,6 +73,16 @@ function tasksReducer(state: TasksState, action: TasksAction): TasksState {
     };
   }
 
+  if (action.type === 'update') {
+    return {
+      tasks: state.tasks.map((task) =>
+        task.id === action.payload.id
+          ? { ...task, ...action.payload.changes }
+          : task
+      ),
+    };
+  }
+
   if (action.type === 'setCompleted') {
     return {
       tasks: state.tasks.map((task) =>
@@ -88,6 +101,7 @@ export function TasksProvider({ children }: { children: ReactNode }) {
   const [isLoading, setIsLoading] = useState(true);
   const pendingInsertions = useRef(new Map<string, Promise<boolean>>());
   const pendingDeletions = useRef(new Map<string, Promise<boolean>>());
+  const pendingTaskUpdates = useRef(new Map<string, Promise<boolean>>());
   const pendingCompletionUpdates = useRef(new Set<string>());
 
   useEffect(() => {
@@ -191,6 +205,37 @@ export function TasksProvider({ children }: { children: ReactNode }) {
     return deletion;
   }, []);
 
+  const updateTask = useCallback(
+    (id: string, changes: TaskUpdate): Promise<boolean> => {
+      const pendingUpdate = pendingTaskUpdates.current.get(id);
+
+      if (pendingUpdate) {
+        return pendingUpdate;
+      }
+
+      const update = updateTaskInDatabase(id, changes)
+        .then((wasUpdated) => {
+          if (wasUpdated) {
+            dispatch({ type: 'update', payload: { id, changes } });
+          }
+
+          return wasUpdated;
+        })
+        .catch((error: unknown) => {
+          console.error('Não foi possível editar a tarefa.', error);
+          return false;
+        })
+        .finally(() => {
+          pendingTaskUpdates.current.delete(id);
+        });
+
+      pendingTaskUpdates.current.set(id, update);
+
+      return update;
+    },
+    []
+  );
+
   const toggleTask = useCallback(
     (id: string) => {
       const task = state.tasks.find((item) => item.id === id);
@@ -247,11 +292,20 @@ export function TasksProvider({ children }: { children: ReactNode }) {
       tasks: state.tasks,
       addTask,
       deleteTask,
+      updateTask,
       toggleTask,
       isLoading,
       ...derivedState,
     }),
-    [addTask, deleteTask, derivedState, isLoading, state.tasks, toggleTask]
+    [
+      addTask,
+      deleteTask,
+      derivedState,
+      isLoading,
+      state.tasks,
+      toggleTask,
+      updateTask,
+    ]
   );
 
   return (

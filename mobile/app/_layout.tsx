@@ -15,6 +15,7 @@ export default function RootLayout() {
         <Stack.Screen name="(auth)" />
         <Stack.Screen name="(tabs)" />
         <Stack.Screen name="nova-tarefa" />
+        <Stack.Screen name="editar-tarefa/[id]" />
       </Stack>
       <StatusBar style="dark" />
     </TasksProvider>

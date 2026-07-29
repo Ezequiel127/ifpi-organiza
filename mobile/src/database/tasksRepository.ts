@@ -1,5 +1,5 @@
 import { getDatabase, initializeDatabase } from '@/src/database/database';
-import type { Task } from '@/src/types/task';
+import type { Task, TaskUpdate } from '@/src/types/task';
 
 type TaskRow = {
   id: string;
@@ -84,6 +84,34 @@ export async function updateTaskCompleted(
     'UPDATE tasks SET completed = ? WHERE id = ?',
     completed ? 1 : 0,
     id
+  );
+
+  return result.changes > 0;
+}
+
+export async function updateTask(
+  id: string,
+  changes: TaskUpdate
+): Promise<boolean> {
+  await initializeDatabase();
+  const database = await getDatabase();
+  const result = await database.runAsync(
+    `UPDATE tasks
+    SET
+      title = ?,
+      subject = ?,
+      deadline = ?,
+      type = ?,
+      description = ?
+    WHERE id = ?`,
+    [
+      changes.title,
+      changes.subject,
+      changes.deadline,
+      changes.type,
+      changes.description,
+      id,
+    ]
   );
 
   return result.changes > 0;

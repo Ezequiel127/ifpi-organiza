@@ -13,3 +13,8 @@ export type NewTask = Pick<
   Task,
   'title' | 'subject' | 'deadline' | 'type' | 'description'
 >;
+
+export type TaskUpdate = Pick<
+  Task,
+  'title' | 'subject' | 'deadline' | 'type' | 'description'
+>;
