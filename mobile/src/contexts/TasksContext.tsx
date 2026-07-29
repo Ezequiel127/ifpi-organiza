@@ -14,6 +14,7 @@ import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
 import { mockTasks } from '@/src/data/mock-tasks';
 import { initializeDatabase } from '@/src/database/database';
 import {
+  deleteTask as deleteTaskFromDatabase,
   getAllTasks,
   insertTask,
   updateTaskCompleted,
@@ -30,11 +31,13 @@ type TasksState = {
 type TasksAction =
   | { type: 'load'; payload: Task[] }
   | { type: 'add'; payload: Task }
+  | { type: 'remove'; payload: { id: string } }
   | { type: 'setCompleted'; payload: { id: string; completed: boolean } };
 
 type TasksContextValue = {
   tasks: Task[];
   addTask: (task: NewTask) => Promise<boolean>;
+  deleteTask: (id: string) => Promise<boolean>;
   toggleTask: (id: string) => void;
   isLoading: boolean;
   pendingCount: number;
@@ -61,6 +64,12 @@ function tasksReducer(state: TasksState, action: TasksAction): TasksState {
     };
   }
 
+  if (action.type === 'remove') {
+    return {
+      tasks: state.tasks.filter((task) => task.id !== action.payload.id),
+    };
+  }
+
   if (action.type === 'setCompleted') {
     return {
       tasks: state.tasks.map((task) =>
@@ -78,6 +87,7 @@ export function TasksProvider({ children }: { children: ReactNode }) {
   const [state, dispatch] = useReducer(tasksReducer, { tasks: [] });
   const [isLoading, setIsLoading] = useState(true);
   const pendingInsertions = useRef(new Map<string, Promise<boolean>>());
+  const pendingDeletions = useRef(new Map<string, Promise<boolean>>());
   const pendingCompletionUpdates = useRef(new Set<string>());
 
   useEffect(() => {
@@ -153,6 +163,34 @@ export function TasksProvider({ children }: { children: ReactNode }) {
     return insertion;
   }, []);
 
+  const deleteTask = useCallback((id: string): Promise<boolean> => {
+    const pendingDeletion = pendingDeletions.current.get(id);
+
+    if (pendingDeletion) {
+      return pendingDeletion;
+    }
+
+    const deletion = deleteTaskFromDatabase(id)
+      .then((wasDeleted) => {
+        if (wasDeleted) {
+          dispatch({ type: 'remove', payload: { id } });
+        }
+
+        return wasDeleted;
+      })
+      .catch((error: unknown) => {
+        console.error('Não foi possível excluir a tarefa.', error);
+        return false;
+      })
+      .finally(() => {
+        pendingDeletions.current.delete(id);
+      });
+
+    pendingDeletions.current.set(id, deletion);
+
+    return deletion;
+  }, []);
+
   const toggleTask = useCallback(
     (id: string) => {
       const task = state.tasks.find((item) => item.id === id);
@@ -208,11 +246,12 @@ export function TasksProvider({ children }: { children: ReactNode }) {
     () => ({
       tasks: state.tasks,
       addTask,
+      deleteTask,
       toggleTask,
       isLoading,
       ...derivedState,
     }),
-    [addTask, derivedState, isLoading, state.tasks, toggleTask]
+    [addTask, deleteTask, derivedState, isLoading, state.tasks, toggleTask]
   );
 
   return (

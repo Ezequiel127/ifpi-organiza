@@ -1,12 +1,21 @@
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { router, type Href } from 'expo-router';
 import { useMemo, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import {
+  ActivityIndicator,
+  Alert,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { useTasks } from '@/src/contexts/TasksContext';
 import { colors } from '@/src/theme/colors';
 import { spacing } from '@/src/theme/spacing';
+import type { Task } from '@/src/types/task';
 import { formatBrazilianDate } from '@/src/utils/date';
 
 type Filter = 'all' | 'pending' | 'completed';
@@ -20,8 +29,11 @@ const filters: { label: string; value: Filter }[] = [
 const newTaskRoute = '/nova-tarefa' as Href;
 
 export default function TasksScreen() {
-  const { tasks, toggleTask } = useTasks();
+  const { deleteTask, tasks, toggleTask } = useTasks();
   const [activeFilter, setActiveFilter] = useState<Filter>('all');
+  const [deletingTaskIds, setDeletingTaskIds] = useState<Set<string>>(
+    () => new Set()
+  );
 
   const visibleTasks = useMemo(
     () =>
@@ -41,6 +53,47 @@ export default function TasksScreen() {
 
   function openNewTask() {
     router.push(newTaskRoute);
+  }
+
+  async function handleDelete(task: Pick<Task, 'id' | 'title'>) {
+    setDeletingTaskIds((currentIds) => new Set(currentIds).add(task.id));
+    const wasDeleted = await deleteTask(task.id);
+    setDeletingTaskIds((currentIds) => {
+      const nextIds = new Set(currentIds);
+      nextIds.delete(task.id);
+      return nextIds;
+    });
+
+    if (!wasDeleted) {
+      Alert.alert(
+        'Não foi possível excluir',
+        `A tarefa "${task.title}" não pôde ser excluída. Tente novamente.`
+      );
+    }
+  }
+
+  function confirmDelete(task: Pick<Task, 'id' | 'title'>) {
+    if (deletingTaskIds.has(task.id)) {
+      return;
+    }
+
+    Alert.alert(
+      'Excluir tarefa',
+      `Deseja excluir permanentemente a tarefa "${task.title}"?`,
+      [
+        {
+          text: 'Cancelar',
+          style: 'cancel',
+        },
+        {
+          text: 'Excluir',
+          style: 'destructive',
+          onPress: () => {
+            void handleDelete(task);
+          },
+        },
+      ]
+    );
   }
 
   return (
@@ -81,35 +134,64 @@ export default function TasksScreen() {
         </View>
 
         <View style={styles.taskList}>
-          {visibleTasks.map((task) => (
-            <View
-              key={task.id}
-              style={[styles.taskCard, task.completed && styles.completedTaskCard]}>
-              <Pressable
-                accessibilityLabel={`Marcar ${task.title} como ${
-                  task.completed ? 'pendente' : 'concluída'
-                }`}
-                accessibilityRole="checkbox"
-                accessibilityState={{ checked: task.completed }}
-                hitSlop={8}
-                onPress={() => toggleTask(task.id)}
-                style={[styles.checkBox, task.completed && styles.checkedBox]}>
-                {task.completed ? (
-                  <MaterialIcons color={colors.white} name="check" size={16} />
-                ) : null}
-              </Pressable>
-              <View style={styles.taskContent}>
-                <Text style={[styles.taskTitle, task.completed && styles.completedTaskTitle]}>
-                  {task.title}
-                </Text>
-                <Text style={styles.taskSubject}>{task.subject}</Text>
-                <View style={styles.metaRow}>
-                  <Text style={styles.taskType}>{task.type}</Text>
-                  <Text style={styles.taskDate}>{formatBrazilianDate(task.deadline)}</Text>
+          {visibleTasks.map((task) => {
+            const isDeleting = deletingTaskIds.has(task.id);
+
+            return (
+              <View
+                key={task.id}
+                style={[styles.taskCard, task.completed && styles.completedTaskCard]}>
+                <Pressable
+                  accessibilityLabel={`Marcar ${task.title} como ${
+                    task.completed ? 'pendente' : 'concluída'
+                  }`}
+                  accessibilityRole="checkbox"
+                  accessibilityState={{ checked: task.completed }}
+                  hitSlop={8}
+                  onPress={() => toggleTask(task.id)}
+                  style={[styles.checkBox, task.completed && styles.checkedBox]}>
+                  {task.completed ? (
+                    <MaterialIcons color={colors.white} name="check" size={16} />
+                  ) : null}
+                </Pressable>
+                <View style={styles.taskContent}>
+                  <Text
+                    style={[styles.taskTitle, task.completed && styles.completedTaskTitle]}>
+                    {task.title}
+                  </Text>
+                  <Text style={styles.taskSubject}>{task.subject}</Text>
+                  <View style={styles.metaRow}>
+                    <Text style={styles.taskType}>{task.type}</Text>
+                    <Text style={styles.taskDate}>
+                      {formatBrazilianDate(task.deadline)}
+                    </Text>
+                  </View>
                 </View>
+                <Pressable
+                  accessibilityLabel={`Excluir tarefa ${task.title}`}
+                  accessibilityRole="button"
+                  accessibilityState={{ busy: isDeleting, disabled: isDeleting }}
+                  disabled={isDeleting}
+                  hitSlop={8}
+                  onPress={() => confirmDelete(task)}
+                  style={({ pressed }) => [
+                    styles.deleteButton,
+                    pressed && styles.deleteButtonPressed,
+                    isDeleting && styles.deleteButtonDisabled,
+                  ]}>
+                  {isDeleting ? (
+                    <ActivityIndicator color={colors.danger} size="small" />
+                  ) : (
+                    <MaterialIcons
+                      color={colors.danger}
+                      name="delete-outline"
+                      size={20}
+                    />
+                  )}
+                </Pressable>
               </View>
-            </View>
-          ))}
+            );
+          })}
 
           {visibleTasks.length === 0 ? (
             <View style={styles.emptyState}>
@@ -229,6 +311,20 @@ const styles = StyleSheet.create({
   },
   checkedBox: {
     backgroundColor: colors.primary,
+  },
+  deleteButton: {
+    alignItems: 'center',
+    backgroundColor: colors.dangerSoft,
+    borderRadius: 10,
+    height: 36,
+    justifyContent: 'center',
+    width: 36,
+  },
+  deleteButtonDisabled: {
+    opacity: 0.6,
+  },
+  deleteButtonPressed: {
+    opacity: 0.75,
   },
   taskContent: {
     flex: 1,

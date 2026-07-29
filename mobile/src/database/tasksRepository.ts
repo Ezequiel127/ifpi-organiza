@@ -88,3 +88,11 @@ export async function updateTaskCompleted(
 
   return result.changes > 0;
 }
+
+export async function deleteTask(id: string): Promise<boolean> {
+  await initializeDatabase();
+  const database = await getDatabase();
+  const result = await database.runAsync('DELETE FROM tasks WHERE id = ?', id);
+
+  return result.changes > 0;
+}
