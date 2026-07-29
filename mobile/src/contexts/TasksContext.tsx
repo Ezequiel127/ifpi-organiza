@@ -9,7 +9,14 @@ import {
   useRef,
   useState,
 } from 'react';
-import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
+import {
+  ActivityIndicator,
+  AppState,
+  type AppStateStatus,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
 
 import { mockTasks } from '@/src/data/mock-tasks';
 import { initializeDatabase } from '@/src/database/database';
@@ -20,6 +27,10 @@ import {
   updateTask as updateTaskInDatabase,
   updateTaskCompleted,
 } from '@/src/database/tasksRepository';
+import {
+  reconcileTaskReminders,
+  type TaskReminderReconciliationSummary,
+} from '@/src/services/taskRemindersService';
 import { colors } from '@/src/theme/colors';
 import { spacing } from '@/src/theme/spacing';
 import type { NewTask, Task, TaskUpdate } from '@/src/types/task';
@@ -49,6 +60,41 @@ type TasksContextValue = {
 };
 
 const TasksContext = createContext<TasksContextValue | undefined>(undefined);
+
+function logAutomaticReconciliationErrors(
+  source: 'durante a inicialização' | 'ao retornar ao aplicativo',
+  summary: TaskReminderReconciliationSummary
+) {
+  if (summary.errors.length > 0) {
+    console.warn(
+      `A sincronização automática de lembretes ${source} terminou com erros.`,
+      summary.errors
+    );
+  }
+}
+
+function reconcileTaskRemindersInBackground(
+  tasks: readonly Task[],
+  source: 'durante a inicialização' | 'ao retornar ao aplicativo'
+) {
+  try {
+    void reconcileTaskReminders(tasks, { requestPermission: false })
+      .then((summary) => {
+        logAutomaticReconciliationErrors(source, summary);
+      })
+      .catch((error: unknown) => {
+        console.error(
+          `Não foi possível sincronizar os lembretes ${source}.`,
+          error
+        );
+      });
+  } catch (error) {
+    console.error(
+      `Não foi possível iniciar a sincronização de lembretes ${source}.`,
+      error
+    );
+  }
+}
 
 function tasksReducer(state: TasksState, action: TasksAction): TasksState {
   if (action.type === 'load') {
@@ -103,6 +149,12 @@ export function TasksProvider({ children }: { children: ReactNode }) {
   const pendingDeletions = useRef(new Map<string, Promise<boolean>>());
   const pendingTaskUpdates = useRef(new Map<string, Promise<boolean>>());
   const pendingCompletionUpdates = useRef(new Set<string>());
+  const latestTasks = useRef(state.tasks);
+  const hasLoadedPersistedTasks = useRef(false);
+  const hasStartedStartupReconciliation = useRef(false);
+  const currentAppState = useRef<AppStateStatus>(AppState.currentState);
+
+  latestTasks.current = state.tasks;
 
   useEffect(() => {
     let isMounted = true;
@@ -113,7 +165,17 @@ export function TasksProvider({ children }: { children: ReactNode }) {
         const tasks = await getAllTasks();
 
         if (isMounted) {
+          latestTasks.current = tasks;
+          hasLoadedPersistedTasks.current = true;
           dispatch({ type: 'load', payload: tasks });
+
+          if (!hasStartedStartupReconciliation.current) {
+            hasStartedStartupReconciliation.current = true;
+            reconcileTaskRemindersInBackground(
+              tasks,
+              'durante a inicialização'
+            );
+          }
         }
       } catch (error) {
         console.error('Não foi possível carregar as tarefas salvas.', error);
@@ -132,6 +194,31 @@ export function TasksProvider({ children }: { children: ReactNode }) {
 
     return () => {
       isMounted = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', (nextAppState) => {
+      const previousAppState = currentAppState.current;
+      currentAppState.current = nextAppState;
+
+      const returnedToActive =
+        nextAppState === 'active' &&
+        (previousAppState === 'background' ||
+          previousAppState === 'inactive');
+
+      if (!returnedToActive || !hasLoadedPersistedTasks.current) {
+        return;
+      }
+
+      reconcileTaskRemindersInBackground(
+        latestTasks.current,
+        'ao retornar ao aplicativo'
+      );
+    });
+
+    return () => {
+      subscription.remove();
     };
   }, []);
 

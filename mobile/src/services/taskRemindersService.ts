@@ -4,7 +4,7 @@ import { Platform } from 'react-native';
 import {
   ACADEMIC_REMINDERS_CHANNEL_ID,
   configureAndroidNotificationChannel,
-  hasNotificationPermission,
+  getNotificationPermissionStatus,
   requestNotificationPermission,
 } from '@/src/services/notificationsService';
 import type { Task } from '@/src/types/task';
@@ -16,7 +16,11 @@ import {
   type TaskReminderType,
 } from '@/src/utils/taskReminderPolicy';
 
-export type TaskReminderPermissionStatus = 'granted' | 'denied' | 'error';
+export type TaskReminderPermissionStatus =
+  | 'granted'
+  | 'denied'
+  | 'undetermined'
+  | 'error';
 
 export type TaskReminderReconciliationOperation =
   | 'configure'
@@ -193,13 +197,14 @@ async function getPermissionStatus(
   }
 
   try {
-    let granted = await hasNotificationPermission();
+    const currentStatus = await getNotificationPermissionStatus();
 
-    if (!granted && requestPermission) {
-      granted = await requestNotificationPermission();
+    if (currentStatus !== 'granted' && requestPermission) {
+      const granted = await requestNotificationPermission();
+      return granted ? 'granted' : 'denied';
     }
 
-    return granted ? 'granted' : 'denied';
+    return currentStatus;
   } catch (error) {
     summary.errors.push({
       operation: 'permission',
@@ -266,8 +271,13 @@ async function runReconciliation(
 
   const managedNotifications = getManagedScheduledNotifications(scheduledNotifications);
 
-  if (summary.permissionStatus !== 'granted') {
+  if (summary.permissionStatus === 'denied') {
     await cancelAllManagedNotifications(managedNotifications, summary);
+    summary.skipped += desiredReminders.size;
+    return summary;
+  }
+
+  if (summary.permissionStatus !== 'granted') {
     summary.skipped += desiredReminders.size;
     return summary;
   }

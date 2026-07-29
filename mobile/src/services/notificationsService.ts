@@ -4,6 +4,11 @@ import { Platform } from 'react-native';
 export const ACADEMIC_REMINDERS_CHANNEL_ID = 'academic-reminders';
 const TEST_NOTIFICATION_DELAY_SECONDS = 5;
 
+export type NotificationPermissionStatus =
+  | 'granted'
+  | 'denied'
+  | 'undetermined';
+
 export async function configureAndroidNotificationChannel(): Promise<void> {
   if (Platform.OS !== 'android') {
     return;
@@ -22,9 +27,18 @@ export async function configureAndroidNotificationChannel(): Promise<void> {
   );
 }
 
-export async function hasNotificationPermission(): Promise<boolean> {
+export async function getNotificationPermissionStatus(): Promise<NotificationPermissionStatus> {
   const permissions = await Notifications.getPermissionsAsync();
-  return permissions.granted;
+
+  if (permissions.granted || permissions.status === 'granted') {
+    return 'granted';
+  }
+
+  return permissions.status === 'undetermined' ? 'undetermined' : 'denied';
+}
+
+export async function hasNotificationPermission(): Promise<boolean> {
+  return (await getNotificationPermissionStatus()) === 'granted';
 }
 
 export async function requestNotificationPermission(): Promise<boolean> {
