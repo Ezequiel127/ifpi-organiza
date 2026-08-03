@@ -1,6 +1,6 @@
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { router, type Href } from 'expo-router';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import {
   KeyboardAvoidingView,
   Platform,
@@ -16,11 +16,13 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTasks } from '@/src/contexts/TasksContext';
 import { colors } from '@/src/theme/colors';
 import { spacing } from '@/src/theme/spacing';
-import { isValidISODate } from '@/src/utils/date';
+import {
+  type TaskFormErrors,
+  type TaskFormField,
+  validateTaskForm,
+} from '@/src/utils/taskValidation';
 
-type FormErrors = Partial<
-  Record<'title' | 'subject' | 'deadline' | 'type' | 'save', string>
->;
+type FormErrors = TaskFormErrors & { save?: string };
 
 const tasksRoute = '/(tabs)/tarefas' as Href;
 
@@ -33,61 +35,85 @@ export default function NewTaskScreen() {
   const [description, setDescription] = useState('');
   const [errors, setErrors] = useState<FormErrors>({});
   const [isSaving, setIsSaving] = useState(false);
+  const isSavingRef = useRef(false);
+  const titleInputRef = useRef<TextInput>(null);
+  const subjectInputRef = useRef<TextInput>(null);
+  const deadlineInputRef = useRef<TextInput>(null);
+  const typeInputRef = useRef<TextInput>(null);
+  const descriptionInputRef = useRef<TextInput>(null);
+
+  function clearFieldError(field: TaskFormField) {
+    setErrors((currentErrors) => {
+      if (!currentErrors[field]) {
+        return currentErrors;
+      }
+
+      const nextErrors = { ...currentErrors };
+      delete nextErrors[field];
+      return nextErrors;
+    });
+  }
+
+  function focusFirstInvalidField(field: TaskFormField | null) {
+    if (!field) {
+      return;
+    }
+
+    const inputRefs = {
+      title: titleInputRef,
+      subject: subjectInputRef,
+      deadline: deadlineInputRef,
+      type: typeInputRef,
+      description: descriptionInputRef,
+    };
+
+    requestAnimationFrame(() => inputRefs[field].current?.focus());
+  }
 
   async function handleSave() {
-    if (isSaving) {
+    if (isSavingRef.current) {
       return;
     }
 
-    const normalizedTask = {
-      title: title.trim(),
-      subject: subject.trim(),
-      deadline: deadline.trim(),
-      type: type.trim(),
-      description: description.trim(),
-    };
-    const nextErrors: FormErrors = {};
+    const validation = validateTaskForm({
+      title,
+      subject,
+      deadline,
+      type,
+      description,
+    });
 
-    if (!normalizedTask.title) {
-      nextErrors.title = 'Informe o título da tarefa.';
-    }
+    setErrors(validation.errors);
 
-    if (!normalizedTask.subject) {
-      nextErrors.subject = 'Informe a disciplina.';
-    }
-
-    if (!normalizedTask.deadline) {
-      nextErrors.deadline = 'Informe o prazo.';
-    } else if (!isValidISODate(normalizedTask.deadline)) {
-      nextErrors.deadline = 'Use uma data válida no formato YYYY-MM-DD.';
-    }
-
-    if (!normalizedTask.type) {
-      nextErrors.type = 'Informe o tipo da tarefa.';
-    }
-
-    setErrors(nextErrors);
-
-    if (Object.keys(nextErrors).length > 0) {
+    if (!validation.valid) {
+      focusFirstInvalidField(validation.firstInvalidField);
       return;
     }
 
+    isSavingRef.current = true;
     setIsSaving(true);
-    const wasSaved = await addTask(normalizedTask);
-    setIsSaving(false);
 
-    if (!wasSaved) {
+    try {
+      const wasSaved = await addTask(validation.normalizedValues);
+
+      if (!wasSaved) {
+        setErrors({ save: 'Não foi possível salvar a tarefa. Tente novamente.' });
+        return;
+      }
+
+      setTitle('');
+      setSubject('');
+      setDeadline('');
+      setType('');
+      setDescription('');
+      setErrors({});
+      router.replace(tasksRoute);
+    } catch {
       setErrors({ save: 'Não foi possível salvar a tarefa. Tente novamente.' });
-      return;
+    } finally {
+      isSavingRef.current = false;
+      setIsSaving(false);
     }
-
-    setTitle('');
-    setSubject('');
-    setDeadline('');
-    setType('');
-    setDescription('');
-    setErrors({});
-    router.replace(tasksRoute);
   }
 
   return (
@@ -123,9 +149,14 @@ export default function NewTaskScreen() {
               <Text style={styles.label}>Título</Text>
               <TextInput
                 accessibilityLabel="Título da tarefa"
-                onChangeText={setTitle}
+                maxLength={100}
+                onChangeText={(value) => {
+                  setTitle(value);
+                  clearFieldError('title');
+                }}
                 placeholder="Ex.: Lista de Programação Mobile"
                 placeholderTextColor={colors.textMuted}
+                ref={titleInputRef}
                 style={[styles.input, errors.title && styles.inputError]}
                 value={title}
               />
@@ -136,9 +167,14 @@ export default function NewTaskScreen() {
               <Text style={styles.label}>Disciplina</Text>
               <TextInput
                 accessibilityLabel="Disciplina"
-                onChangeText={setSubject}
+                maxLength={60}
+                onChangeText={(value) => {
+                  setSubject(value);
+                  clearFieldError('subject');
+                }}
                 placeholder="Ex.: Programação para Dispositivos Móveis"
                 placeholderTextColor={colors.textMuted}
+                ref={subjectInputRef}
                 style={[styles.input, errors.subject && styles.inputError]}
                 value={subject}
               />
@@ -151,9 +187,13 @@ export default function NewTaskScreen() {
                 accessibilityLabel="Prazo no formato ano, mês e dia"
                 autoCapitalize="none"
                 keyboardType="numbers-and-punctuation"
-                onChangeText={setDeadline}
+                onChangeText={(value) => {
+                  setDeadline(value);
+                  clearFieldError('deadline');
+                }}
                 placeholder="YYYY-MM-DD"
                 placeholderTextColor={colors.textMuted}
+                ref={deadlineInputRef}
                 style={[styles.input, errors.deadline && styles.inputError]}
                 value={deadline}
               />
@@ -164,9 +204,13 @@ export default function NewTaskScreen() {
               <Text style={styles.label}>Tipo</Text>
               <TextInput
                 accessibilityLabel="Tipo da tarefa"
-                onChangeText={setType}
+                onChangeText={(value) => {
+                  setType(value);
+                  clearFieldError('type');
+                }}
                 placeholder="Ex.: Trabalho, prova ou seminário"
                 placeholderTextColor={colors.textMuted}
+                ref={typeInputRef}
                 style={[styles.input, errors.type && styles.inputError]}
                 value={type}
               />
@@ -177,14 +221,26 @@ export default function NewTaskScreen() {
               <Text style={styles.label}>Descrição</Text>
               <TextInput
                 accessibilityLabel="Descrição da tarefa"
+                maxLength={500}
                 multiline
-                onChangeText={setDescription}
+                onChangeText={(value) => {
+                  setDescription(value);
+                  clearFieldError('description');
+                }}
                 placeholder="Adicione orientações ou observações importantes."
                 placeholderTextColor={colors.textMuted}
-                style={[styles.input, styles.textArea]}
+                ref={descriptionInputRef}
+                style={[
+                  styles.input,
+                  styles.textArea,
+                  errors.description && styles.inputError,
+                ]}
                 textAlignVertical="top"
                 value={description}
               />
+              {errors.description ? (
+                <Text style={styles.errorText}>{errors.description}</Text>
+              ) : null}
             </View>
 
             <Pressable

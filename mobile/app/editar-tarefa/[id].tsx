@@ -1,6 +1,6 @@
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { router, type Href, useLocalSearchParams } from 'expo-router';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import {
   KeyboardAvoidingView,
   Platform,
@@ -17,11 +17,13 @@ import { useTasks } from '@/src/contexts/TasksContext';
 import { colors } from '@/src/theme/colors';
 import { spacing } from '@/src/theme/spacing';
 import type { Task } from '@/src/types/task';
-import { isValidISODate } from '@/src/utils/date';
+import {
+  type TaskFormErrors,
+  type TaskFormField,
+  validateTaskForm,
+} from '@/src/utils/taskValidation';
 
-type FormErrors = Partial<
-  Record<'title' | 'subject' | 'deadline' | 'type' | 'save', string>
->;
+type FormErrors = TaskFormErrors & { save?: string };
 
 const tasksRoute = '/(tabs)/tarefas' as Href;
 
@@ -71,58 +73,84 @@ function EditTaskForm({ task }: { task: Task }) {
   const [description, setDescription] = useState(task.description);
   const [errors, setErrors] = useState<FormErrors>({});
   const [isSaving, setIsSaving] = useState(false);
+  const isSavingRef = useRef(false);
+  const titleInputRef = useRef<TextInput>(null);
+  const subjectInputRef = useRef<TextInput>(null);
+  const deadlineInputRef = useRef<TextInput>(null);
+  const typeInputRef = useRef<TextInput>(null);
+  const descriptionInputRef = useRef<TextInput>(null);
+
+  function clearFieldError(field: TaskFormField) {
+    setErrors((currentErrors) => {
+      if (!currentErrors[field]) {
+        return currentErrors;
+      }
+
+      const nextErrors = { ...currentErrors };
+      delete nextErrors[field];
+      return nextErrors;
+    });
+  }
+
+  function focusFirstInvalidField(field: TaskFormField | null) {
+    if (!field) {
+      return;
+    }
+
+    const inputRefs = {
+      title: titleInputRef,
+      subject: subjectInputRef,
+      deadline: deadlineInputRef,
+      type: typeInputRef,
+      description: descriptionInputRef,
+    };
+
+    requestAnimationFrame(() => inputRefs[field].current?.focus());
+  }
 
   async function handleSave() {
-    if (isSaving) {
+    if (isSavingRef.current) {
       return;
     }
 
-    const normalizedChanges = {
-      title: title.trim(),
-      subject: subject.trim(),
-      deadline: deadline.trim(),
-      type: type.trim(),
-      description: description.trim(),
-    };
-    const nextErrors: FormErrors = {};
+    const validation = validateTaskForm({
+      title,
+      subject,
+      deadline,
+      type,
+      description,
+    });
 
-    if (!normalizedChanges.title) {
-      nextErrors.title = 'Informe o título da tarefa.';
-    }
+    setErrors(validation.errors);
 
-    if (!normalizedChanges.subject) {
-      nextErrors.subject = 'Informe a disciplina.';
-    }
-
-    if (!normalizedChanges.deadline) {
-      nextErrors.deadline = 'Informe o prazo.';
-    } else if (!isValidISODate(normalizedChanges.deadline)) {
-      nextErrors.deadline = 'Use uma data válida no formato YYYY-MM-DD.';
-    }
-
-    if (!normalizedChanges.type) {
-      nextErrors.type = 'Informe o tipo da tarefa.';
-    }
-
-    setErrors(nextErrors);
-
-    if (Object.keys(nextErrors).length > 0) {
+    if (!validation.valid) {
+      focusFirstInvalidField(validation.firstInvalidField);
       return;
     }
 
+    isSavingRef.current = true;
     setIsSaving(true);
-    const wasUpdated = await updateTask(task.id, normalizedChanges);
-    setIsSaving(false);
 
-    if (!wasUpdated) {
+    try {
+      const wasUpdated = await updateTask(task.id, validation.normalizedValues);
+
+      if (!wasUpdated) {
+        setErrors({
+          save: 'Não foi possível salvar as alterações. Tente novamente.',
+        });
+        return;
+      }
+
+      setErrors({});
+      router.replace(tasksRoute);
+    } catch {
       setErrors({
         save: 'Não foi possível salvar as alterações. Tente novamente.',
       });
-      return;
+    } finally {
+      isSavingRef.current = false;
+      setIsSaving(false);
     }
-
-    setErrors({});
-    router.replace(tasksRoute);
   }
 
   function handleCancel() {
@@ -171,9 +199,14 @@ function EditTaskForm({ task }: { task: Task }) {
               <TextInput
                 accessibilityLabel="Título da tarefa"
                 editable={!isSaving}
-                onChangeText={setTitle}
+                maxLength={Math.max(100, title.length)}
+                onChangeText={(value) => {
+                  setTitle(value);
+                  clearFieldError('title');
+                }}
                 placeholder="Ex.: Lista de Programação Mobile"
                 placeholderTextColor={colors.textMuted}
+                ref={titleInputRef}
                 style={[styles.input, errors.title && styles.inputError]}
                 value={title}
               />
@@ -185,9 +218,14 @@ function EditTaskForm({ task }: { task: Task }) {
               <TextInput
                 accessibilityLabel="Disciplina"
                 editable={!isSaving}
-                onChangeText={setSubject}
+                maxLength={Math.max(60, subject.length)}
+                onChangeText={(value) => {
+                  setSubject(value);
+                  clearFieldError('subject');
+                }}
                 placeholder="Ex.: Programação para Dispositivos Móveis"
                 placeholderTextColor={colors.textMuted}
+                ref={subjectInputRef}
                 style={[styles.input, errors.subject && styles.inputError]}
                 value={subject}
               />
@@ -203,9 +241,13 @@ function EditTaskForm({ task }: { task: Task }) {
                 autoCapitalize="none"
                 editable={!isSaving}
                 keyboardType="numbers-and-punctuation"
-                onChangeText={setDeadline}
+                onChangeText={(value) => {
+                  setDeadline(value);
+                  clearFieldError('deadline');
+                }}
                 placeholder="YYYY-MM-DD"
                 placeholderTextColor={colors.textMuted}
+                ref={deadlineInputRef}
                 style={[styles.input, errors.deadline && styles.inputError]}
                 value={deadline}
               />
@@ -219,9 +261,13 @@ function EditTaskForm({ task }: { task: Task }) {
               <TextInput
                 accessibilityLabel="Tipo da tarefa"
                 editable={!isSaving}
-                onChangeText={setType}
+                onChangeText={(value) => {
+                  setType(value);
+                  clearFieldError('type');
+                }}
                 placeholder="Ex.: Trabalho, prova ou seminário"
                 placeholderTextColor={colors.textMuted}
+                ref={typeInputRef}
                 style={[styles.input, errors.type && styles.inputError]}
                 value={type}
               />
@@ -233,14 +279,26 @@ function EditTaskForm({ task }: { task: Task }) {
               <TextInput
                 accessibilityLabel="Descrição da tarefa"
                 editable={!isSaving}
+                maxLength={Math.max(500, description.length)}
                 multiline
-                onChangeText={setDescription}
+                onChangeText={(value) => {
+                  setDescription(value);
+                  clearFieldError('description');
+                }}
                 placeholder="Adicione orientações ou observações importantes."
                 placeholderTextColor={colors.textMuted}
-                style={[styles.input, styles.textArea]}
+                ref={descriptionInputRef}
+                style={[
+                  styles.input,
+                  styles.textArea,
+                  errors.description && styles.inputError,
+                ]}
                 textAlignVertical="top"
                 value={description}
               />
+              {errors.description ? (
+                <Text style={styles.errorText}>{errors.description}</Text>
+              ) : null}
             </View>
 
             <Pressable
