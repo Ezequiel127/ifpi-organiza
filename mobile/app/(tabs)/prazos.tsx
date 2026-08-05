@@ -1,6 +1,7 @@
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
+import { router, type Href } from 'expo-router';
 import { useMemo } from 'react';
-import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { useTasks } from '@/src/contexts/TasksContext';
@@ -26,6 +27,10 @@ export default function DeadlinesScreen() {
         .sort((a, b) => a.task.deadline.localeCompare(b.task.deadline)),
     [tasks]
   );
+
+  function openTaskDetails(id: string) {
+    router.push(`/detalhes-tarefa/${encodeURIComponent(id)}` as Href);
+  }
 
   return (
     <SafeAreaView edges={['top']} style={styles.safeArea}>
@@ -54,7 +59,15 @@ export default function DeadlinesScreen() {
 
         <View style={styles.deadlineList}>
           {deadlines.map(({ task, date }) => (
-            <View key={task.id} style={styles.deadlineCard}>
+            <Pressable
+              accessibilityLabel={`Ver detalhes da tarefa ${task.title}`}
+              accessibilityRole="button"
+              key={task.id}
+              onPress={() => openTaskDetails(task.id)}
+              style={({ pressed }) => [
+                styles.deadlineCard,
+                pressed && styles.deadlineCardPressed,
+              ]}>
               <View style={styles.dateBlock}>
                 <Text style={styles.dateDay}>{date.day}</Text>
                 <Text style={styles.dateMonth}>{date.month}</Text>
@@ -66,7 +79,7 @@ export default function DeadlinesScreen() {
                   <Text style={styles.typeText}>{task.type}</Text>
                 </View>
               </View>
-            </View>
+            </Pressable>
           ))}
 
           {deadlines.length === 0 ? (
@@ -156,6 +169,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: spacing.md,
     padding: spacing.md,
+  },
+  deadlineCardPressed: {
+    opacity: 0.75,
   },
   dateBlock: {
     alignItems: 'center',

@@ -159,6 +159,10 @@ export default function TasksScreen() {
     router.push(`/editar-tarefa/${encodeURIComponent(id)}` as Href);
   }
 
+  function openTaskDetails(id: string) {
+    router.push(`/detalhes-tarefa/${encodeURIComponent(id)}` as Href);
+  }
+
   async function handleDelete(task: Pick<Task, 'id' | 'title'>) {
     setDeletingTaskIds((currentIds) => new Set(currentIds).add(task.id));
     const wasDeleted = await deleteTask(task.id);
@@ -322,7 +326,17 @@ export default function TasksScreen() {
                     <MaterialIcons color={colors.white} name="check" size={16} />
                   ) : null}
                 </Pressable>
-                <View style={styles.taskContent}>
+                <Pressable
+                  accessibilityLabel={`Ver detalhes da tarefa ${task.title}`}
+                  accessibilityRole="button"
+                  accessibilityState={{ disabled: isDeleting }}
+                  disabled={isDeleting}
+                  onPress={() => openTaskDetails(task.id)}
+                  style={({ pressed }) => [
+                    styles.taskContent,
+                    pressed && styles.taskContentPressed,
+                    isDeleting && styles.actionButtonDisabled,
+                  ]}>
                   <Text
                     style={[styles.taskTitle, task.completed && styles.completedTaskTitle]}>
                     {task.title}
@@ -334,7 +348,7 @@ export default function TasksScreen() {
                       {formatBrazilianDate(task.deadline)}
                     </Text>
                   </View>
-                </View>
+                </Pressable>
                 <View style={styles.actionColumn}>
                   <Pressable
                     accessibilityLabel={`Editar tarefa ${task.title}`}
@@ -605,6 +619,10 @@ const styles = StyleSheet.create({
   },
   taskContent: {
     flex: 1,
+    minHeight: 72,
+  },
+  taskContentPressed: {
+    opacity: 0.7,
   },
   taskTitle: {
     color: colors.text,

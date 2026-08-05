@@ -23,6 +23,10 @@ export default function DashboardScreen() {
     router.push(newTaskRoute);
   }
 
+  function openTaskDetails(id: string) {
+    router.push(`/detalhes-tarefa/${encodeURIComponent(id)}` as Href);
+  }
+
   return (
     <SafeAreaView edges={['top']} style={styles.safeArea}>
       <ScrollView
@@ -95,14 +99,21 @@ export default function DashboardScreen() {
                   <MaterialIcons color={colors.white} name="check" size={16} />
                 ) : null}
               </Pressable>
-              <View style={styles.taskContent}>
+              <Pressable
+                accessibilityLabel={`Ver detalhes da tarefa ${task.title}`}
+                accessibilityRole="button"
+                onPress={() => openTaskDetails(task.id)}
+                style={({ pressed }) => [
+                  styles.taskContent,
+                  pressed && styles.taskContentPressed,
+                ]}>
                 <Text style={[styles.taskTitle, task.completed && styles.completedTaskTitle]}>
                   {task.title}
                 </Text>
                 <Text style={styles.taskMeta}>
                   {task.subject} • {formatBrazilianDate(task.deadline)}
                 </Text>
-              </View>
+              </Pressable>
             </View>
           ))}
 
@@ -283,6 +294,11 @@ const styles = StyleSheet.create({
   },
   taskContent: {
     flex: 1,
+    justifyContent: 'center',
+    minHeight: 44,
+  },
+  taskContentPressed: {
+    opacity: 0.7,
   },
   taskTitle: {
     color: colors.text,
