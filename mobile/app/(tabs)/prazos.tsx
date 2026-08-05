@@ -8,6 +8,7 @@ import { useTasks } from '@/src/contexts/TasksContext';
 import { colors } from '@/src/theme/colors';
 import { spacing } from '@/src/theme/spacing';
 import { getBrazilianDateParts } from '@/src/utils/date';
+import { isTaskOverdue } from '@/src/utils/taskStatus';
 
 export default function DeadlinesScreen() {
   const { tasks } = useTasks();
@@ -22,7 +23,9 @@ export default function DeadlinesScreen() {
 
           const date = getBrazilianDateParts(task.deadline);
 
-          return date ? [{ task, date }] : [];
+          return date
+            ? [{ task, date, isOverdue: isTaskOverdue(task) }]
+            : [];
         })
         .sort((a, b) => a.task.deadline.localeCompare(b.task.deadline)),
     [tasks]
@@ -58,9 +61,11 @@ export default function DeadlinesScreen() {
         </View>
 
         <View style={styles.deadlineList}>
-          {deadlines.map(({ task, date }) => (
+          {deadlines.map(({ task, date, isOverdue }) => (
             <Pressable
-              accessibilityLabel={`Ver detalhes da tarefa ${task.title}`}
+              accessibilityLabel={`Ver detalhes da tarefa ${task.title}${
+                isOverdue ? ', atrasada' : ''
+              }`}
               accessibilityRole="button"
               key={task.id}
               onPress={() => openTaskDetails(task.id)}
@@ -75,8 +80,15 @@ export default function DeadlinesScreen() {
               <View style={styles.deadlineContent}>
                 <Text style={styles.deadlineTitle}>{task.title}</Text>
                 <Text style={styles.deadlineSubject}>{task.subject}</Text>
-                <View style={styles.typeTag}>
-                  <Text style={styles.typeText}>{task.type}</Text>
+                <View style={styles.tagRow}>
+                  <View style={styles.typeTag}>
+                    <Text style={styles.typeText}>{task.type}</Text>
+                  </View>
+                  {isOverdue ? (
+                    <View style={styles.overdueTag}>
+                      <Text style={styles.overdueText}>Atrasada</Text>
+                    </View>
+                  ) : null}
                 </View>
               </View>
             </Pressable>
@@ -206,16 +218,34 @@ const styles = StyleSheet.create({
     lineHeight: 18,
     marginTop: spacing.xs,
   },
+  tagRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.xs,
+    marginTop: spacing.sm,
+  },
   typeTag: {
     alignSelf: 'flex-start',
     backgroundColor: colors.warningSoft,
     borderRadius: 99,
-    marginTop: spacing.sm,
     paddingHorizontal: spacing.sm,
     paddingVertical: spacing.xs,
   },
   typeText: {
     color: colors.text,
+    fontSize: 10,
+    fontWeight: '800',
+  },
+  overdueTag: {
+    alignSelf: 'flex-start',
+    backgroundColor: colors.dangerSoft,
+    borderRadius: 99,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
+  },
+  overdueText: {
+    color: colors.danger,
     fontSize: 10,
     fontWeight: '800',
   },

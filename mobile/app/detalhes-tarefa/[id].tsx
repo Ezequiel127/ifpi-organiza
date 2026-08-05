@@ -7,6 +7,7 @@ import { useTasks } from '@/src/contexts/TasksContext';
 import { colors } from '@/src/theme/colors';
 import { spacing } from '@/src/theme/spacing';
 import { formatLongBrazilianDate } from '@/src/utils/date';
+import { isTaskOverdue } from '@/src/utils/taskStatus';
 
 const tasksRoute = '/(tabs)/tarefas' as Href;
 
@@ -35,6 +36,12 @@ export default function TaskDetailsScreen() {
   }
 
   const currentTaskId = task.id;
+  const taskIsOverdue = isTaskOverdue(task);
+  const statusLabel = task.completed
+    ? 'Concluída'
+    : taskIsOverdue
+      ? 'Atrasada'
+      : 'Pendente';
 
   function openEditTask() {
     router.push(`/editar-tarefa/${encodeURIComponent(currentTaskId)}` as Href);
@@ -65,22 +72,40 @@ export default function TaskDetailsScreen() {
         showsVerticalScrollIndicator={false}>
         <View style={styles.summaryCard}>
           <View
-            accessibilityLabel={`Status: ${task.completed ? 'concluída' : 'pendente'}`}
+            accessibilityLabel={`Status: ${statusLabel.toLocaleLowerCase('pt-BR')}`}
+            accessible
             style={[
               styles.statusBadge,
-              task.completed ? styles.completedBadge : styles.pendingBadge,
+              task.completed
+                ? styles.completedBadge
+                : taskIsOverdue
+                  ? styles.overdueBadge
+                  : styles.pendingBadge,
             ]}>
             <MaterialIcons
-              color={task.completed ? colors.primaryDark : colors.text}
-              name={task.completed ? 'check-circle' : 'schedule'}
+              color={
+                task.completed
+                  ? colors.primaryDark
+                  : taskIsOverdue
+                    ? colors.danger
+                    : colors.text
+              }
+              name={
+                task.completed
+                  ? 'check-circle'
+                  : taskIsOverdue
+                    ? 'error-outline'
+                    : 'schedule'
+              }
               size={17}
             />
             <Text
               style={[
                 styles.statusText,
                 task.completed && styles.completedStatusText,
+                taskIsOverdue && styles.overdueStatusText,
               ]}>
-              {task.completed ? 'Concluída' : 'Pendente'}
+              {statusLabel}
             </Text>
           </View>
           <Text style={styles.taskTitle}>{task.title}</Text>
@@ -238,6 +263,9 @@ const styles = StyleSheet.create({
   completedBadge: {
     backgroundColor: colors.primarySoft,
   },
+  overdueBadge: {
+    backgroundColor: colors.dangerSoft,
+  },
   statusText: {
     color: colors.text,
     fontSize: 12,
@@ -245,6 +273,9 @@ const styles = StyleSheet.create({
   },
   completedStatusText: {
     color: colors.primaryDark,
+  },
+  overdueStatusText: {
+    color: colors.danger,
   },
   taskTitle: {
     color: colors.text,

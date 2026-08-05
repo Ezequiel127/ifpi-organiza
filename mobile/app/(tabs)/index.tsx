@@ -8,11 +8,17 @@ import { useTasks } from '@/src/contexts/TasksContext';
 import { colors } from '@/src/theme/colors';
 import { spacing } from '@/src/theme/spacing';
 import { formatBrazilianDate, formatLongBrazilianDate } from '@/src/utils/date';
+import { isTaskOverdue } from '@/src/utils/taskStatus';
 
 const newTaskRoute = '/nova-tarefa' as Href;
 
 export default function DashboardScreen() {
   const { tasks, pendingCount, completedCount, nextDeadline, toggleTask } = useTasks();
+  const today = new Date();
+  const overdueCount = tasks.reduce(
+    (count, task) => count + (isTaskOverdue(task, today) ? 1 : 0),
+    0
+  );
 
   const recentTasks = useMemo(
     () => [...tasks].sort((a, b) => b.createdAt.localeCompare(a.createdAt)).slice(0, 3),
@@ -50,6 +56,17 @@ export default function DashboardScreen() {
           <View style={styles.summaryCard}>
             <Text style={styles.summaryNumber}>{completedCount}</Text>
             <Text style={styles.summaryLabel}>Concluídas</Text>
+          </View>
+          <View
+            accessibilityLabel={`${overdueCount} ${
+              overdueCount === 1 ? 'tarefa atrasada' : 'tarefas atrasadas'
+            }`}
+            accessible
+            style={[styles.summaryCard, styles.overdueSummaryCard]}>
+            <Text style={[styles.summaryNumber, styles.overdueSummaryNumber]}>
+              {overdueCount}
+            </Text>
+            <Text style={styles.summaryLabel}>Atrasadas</Text>
           </View>
         </View>
 
@@ -179,12 +196,20 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     borderWidth: 1,
     flex: 1,
-    padding: spacing.md,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.md,
+  },
+  overdueSummaryCard: {
+    backgroundColor: colors.dangerSoft,
+    borderColor: colors.danger,
   },
   summaryNumber: {
     color: colors.primaryDark,
     fontSize: 30,
     fontWeight: '800',
+  },
+  overdueSummaryNumber: {
+    color: colors.danger,
   },
   summaryLabel: {
     color: colors.textMuted,

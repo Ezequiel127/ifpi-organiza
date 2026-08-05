@@ -18,13 +18,15 @@ import { colors } from '@/src/theme/colors';
 import { spacing } from '@/src/theme/spacing';
 import type { Task } from '@/src/types/task';
 import { formatBrazilianDate, isValidISODate } from '@/src/utils/date';
+import { isTaskOverdue } from '@/src/utils/taskStatus';
 
-type Filter = 'all' | 'pending' | 'completed';
+type Filter = 'all' | 'pending' | 'overdue' | 'completed';
 type SortOption = 'deadlineAsc' | 'deadlineDesc' | 'recent';
 
 const filters: { label: string; value: Filter }[] = [
   { label: 'Todas', value: 'all' },
   { label: 'Pendentes', value: 'pending' },
+  { label: 'Atrasadas', value: 'overdue' },
   { label: 'Concluídas', value: 'completed' },
 ];
 
@@ -128,6 +130,10 @@ export default function TasksScreen() {
     const filteredByStatus = tasks.filter((task) => {
       if (activeFilter === 'pending') {
         return !task.completed;
+      }
+
+      if (activeFilter === 'overdue') {
+        return isTaskOverdue(task);
       }
 
       if (activeFilter === 'completed') {
@@ -304,6 +310,7 @@ export default function TasksScreen() {
         <View style={styles.taskList}>
           {visibleTasks.map((task) => {
             const isDeleting = deletingTaskIds.has(task.id);
+            const taskIsOverdue = isTaskOverdue(task);
 
             return (
               <View
@@ -327,7 +334,9 @@ export default function TasksScreen() {
                   ) : null}
                 </Pressable>
                 <Pressable
-                  accessibilityLabel={`Ver detalhes da tarefa ${task.title}`}
+                  accessibilityLabel={`Ver detalhes da tarefa ${task.title}${
+                    taskIsOverdue ? ', atrasada' : ''
+                  }`}
                   accessibilityRole="button"
                   accessibilityState={{ disabled: isDeleting }}
                   disabled={isDeleting}
@@ -343,7 +352,12 @@ export default function TasksScreen() {
                   </Text>
                   <Text style={styles.taskSubject}>{task.subject}</Text>
                   <View style={styles.metaRow}>
-                    <Text style={styles.taskType}>{task.type}</Text>
+                    <View style={styles.metaTags}>
+                      <Text style={styles.taskType}>{task.type}</Text>
+                      {taskIsOverdue ? (
+                        <Text style={styles.overdueBadge}>Atrasada</Text>
+                      ) : null}
+                    </View>
                     <Text style={styles.taskDate}>
                       {formatBrazilianDate(task.deadline)}
                     </Text>
@@ -505,7 +519,7 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     minHeight: 42,
-    paddingHorizontal: spacing.sm,
+    paddingHorizontal: spacing.xs,
   },
   activeFilterButton: {
     backgroundColor: colors.primary,
@@ -513,7 +527,7 @@ const styles = StyleSheet.create({
   },
   filterText: {
     color: colors.textMuted,
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '700',
   },
   activeFilterText: {
@@ -645,6 +659,12 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     marginTop: spacing.md,
   },
+  metaTags: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    flexShrink: 1,
+    gap: spacing.xs,
+  },
   taskType: {
     backgroundColor: colors.primarySoft,
     borderRadius: 99,
@@ -659,6 +679,16 @@ const styles = StyleSheet.create({
     color: colors.textMuted,
     fontSize: 12,
     fontWeight: '700',
+  },
+  overdueBadge: {
+    backgroundColor: colors.dangerSoft,
+    borderRadius: 99,
+    color: colors.danger,
+    fontSize: 10,
+    fontWeight: '800',
+    overflow: 'hidden',
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
   },
   emptyState: {
     alignItems: 'center',
